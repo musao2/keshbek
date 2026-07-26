@@ -20,7 +20,8 @@ function App() {
       case 'profile':
         return <ProfilePage />;
       default:
-        return <HomePage />;
+        return <HomePage />;   
+        
     }
   };
 
