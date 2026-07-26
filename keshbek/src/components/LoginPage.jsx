@@ -21,18 +21,38 @@ const LoginPage = () => {
     setLoading(true);
 
     if (mode === 'login') {
-      const { error } = await signIn(email, password);
-      if (error) setError('Email yoki parol noto\'g\'ri');
+      const { data, error } = await signIn(email, password);
+
+      if (error) {
+        // Supabase xato kodlarini o'zbek tilida ko'rsatish
+        const msg = error.message?.toLowerCase() ?? '';
+        if (msg.includes('invalid login credentials') || msg.includes('invalid credentials')) {
+          setError('Email yoki parol noto\'g\'ri. Qayta tekshiring.');
+        } else if (msg.includes('email not confirmed')) {
+          setError('Emailingizni tasdiqlamadingiz. Supabase dashboard → Authentication → Providers → Email → "Confirm email" ni o\'chiring.');
+        } else if (msg.includes('too many requests') || msg.includes('after')) {
+          setError('Juda ko\'p urinish. Bir daqiqa kuting va qayta urinib ko\'ring.');
+        } else {
+          setError('Xatolik: ' + error.message);
+        }
+      }
+      // Muvaffaqiyatli bo'lsa AuthContext onAuthStateChange orqali avtomatik kiriladi
     } else {
       if (!name.trim()) { setError('Ism familiyani kiriting'); setLoading(false); return; }
       const { error } = await signUp(email, password, name, phone);
-      if (error) setError(error.message === 'User already registered'
-        ? 'Bu email allaqachon ro\'yxatdan o\'tgan'
-        : error.message);
+      if (error) {
+        const msg = error.message?.toLowerCase() ?? '';
+        if (msg.includes('already registered') || msg.includes('already exists')) {
+          setError('Bu email allaqachon ro\'yxatdan o\'tgan. Kirish tugmasini bosing.');
+        } else {
+          setError('Xatolik: ' + error.message);
+        }
+      }
     }
 
     setLoading(false);
   };
+
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0f7b4c] via-[#0a5c39] to-[#063d27] flex flex-col items-center justify-center px-6">
