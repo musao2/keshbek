@@ -10,15 +10,15 @@ import QRScanner from './QRScanner';
 const formatSum = (n) =>
   Number(n || 0).toLocaleString('uz-UZ') + ' so\'m';
 
-// Vaqtni o'zbek tilida ko'rsatish
 const formatDate = (iso) => {
   const d = new Date(iso);
-  const now = new Date();
-  const diffDays = Math.floor((now - d) / 86400000);
-  const time = d.toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' });
-  if (diffDays === 0) return `Bugun, ${time}`;
-  if (diffDays === 1) return `Kecha, ${time}`;
-  return d.toLocaleDateString('uz-UZ', { day: 'numeric', month: 'short' }) + `, ${time}`;
+  const pad = (n) => String(n).padStart(2, '0');
+  const day = pad(d.getDate());
+  const month = pad(d.getMonth() + 1);
+  const year = d.getFullYear();
+  const hour = pad(d.getHours());
+  const minute = pad(d.getMinutes());
+  return `${day}.${month}.${year} ${hour}:${minute}`;
 };
 
 const HomePage = () => {
@@ -31,17 +31,44 @@ const HomePage = () => {
 
   const handleScan = async (qrData) => {
     setShowScanner(false);
+    
+    // QR dan summa va keshbek foizini to'g'ri ajratish
+    let amount = 100000;
+    let tokenId = '';
+    let scanType = 'cashback';
+    let cashbackPercent = 1.5; // boshlang'ich default 1.5%
 
-    // QR dan summani ajratish (masalan: "AMOUNT:50000" yoki raqam)
-    const match = qrData.match(/(\d+)/);
-    const amount = match ? parseInt(match[1]) : 100000;
+    if (qrData && qrData.includes('|')) {
+      const parts = qrData.split('|');
+      if (parts[0] === 'KESHBAK') {
+        tokenId = parts[1];
+        scanType = parts[2];
+        amount = parseInt(parts[3], 10) || 0;
+        // QR tarkibidagi foizni o'qiymiz, agar bo'lmasa 1.5% deb oladi
+        cashbackPercent = parts.length >= 5 ? parseFloat(parts[4]) : 1.5;
+      }
+    } else if (qrData) {
+      // Eskicha format yoki faqat raqam bo'lsa
+      const match = qrData.match(/(\d+)/);
+      amount = match ? parseInt(match[1]) : 100000;
+    }
 
-    const { cashbackAmount, error } = await addTransaction({ amount, cashbackPercent: 5 });
+    // Tranzaksiyani yuborish
+    const { cashbackAmount, error } = await addTransaction({ 
+      amount, 
+      cashbackPercent: cashbackPercent, // Dinamik foizni yuboramiz
+      type: scanType,
+      currentBalance: Number(profile?.cashback_balance || 0)
+    });
 
     if (error) {
       setScanMsg('❌ Xatolik: ' + error);
     } else {
-      setScanMsg(`✅ +${formatSum(cashbackAmount)} keshbek yig'ildi!`);
+      if (scanType === 'withdraw') {
+        setScanMsg(`✅ ${formatSum(amount)} keshbek yechib olindi!`);
+      } else {
+        setScanMsg(`✅ +${formatSum(cashbackAmount)} keshbek yig'ildi! (${cashbackPercent}%)`);
+      }
       await refreshProfile();
     }
 
