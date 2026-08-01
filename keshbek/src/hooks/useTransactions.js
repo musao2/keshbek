@@ -41,8 +41,52 @@ export const useTransactions = (userId) => {
   }, [userId]);
 
   // Yangi tranzaksiya qo'shish + balansni yangilash
-  const addTransaction = async ({ amount, cashbackPercent = 5, type = 'cashback', currentBalance = 0 }) => {
+  const addTransaction = async ({ amount, cashbackPercent = 5, type = 'cashback', tokenId = null, currentBalance = 0 }) => {
     if (!userId) return { error: 'Foydalanuvchi topilmadi' };
+
+    if (!tokenId) {
+      return { error: 'Yaroqsiz QR-kod! (Token ID topilmadi)' };
+    }
+
+    // 1. QR Token ID ni Supabase'dan tekshiramiz
+    const { data: tokenData, error: tokenError } = await supabase
+      .from('qr_tokens')
+      .select('*')
+      .eq('id', tokenId)
+      .maybeSingle();
+
+    if (tokenError) {
+      return { error: 'QR-kod holatini tekshirishda xatolik: ' + tokenError.message };
+    }
+
+    if (!tokenData) {
+      return { error: 'Bu QR-kod topilmadi yoki allaqachon ishlatib bo\'lingan!' };
+    }
+
+    if (tokenData.used) {
+      return { error: 'Bu QR-kod allaqachon ishlatilingan! (Faqat 1 marta ishlaydi)' };
+    }
+
+    if (tokenData.expires_at && new Date(tokenData.expires_at) < new Date()) {
+      return { error: 'Bu QR-kodning amal qilish muddati tugagan!' };
+    }
+
+    // 2. Tokenni ishlatilgan deb belgilaymiz (used = true) va darhol bazadan o'chiramiz
+    const { error: updateErr } = await supabase
+      .from('qr_tokens')
+      .update({ used: true })
+      .eq('id', tokenId);
+
+    const { error: deleteErr } = await supabase
+      .from('qr_tokens')
+      .delete()
+      .eq('id', tokenId);
+
+    if (updateErr || deleteErr) {
+      const dbErr = updateErr || deleteErr;
+      console.error("qr_tokens o'chirishda Supabase RLS xatoligi:", dbErr);
+      return { error: "Supabase bazasida ruxsat xatosi (RLS): " + dbErr.message };
+    }
 
     let cashbackAmount = 0;
     if (type === 'withdraw') {
