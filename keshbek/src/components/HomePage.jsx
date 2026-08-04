@@ -28,7 +28,12 @@ const HomePage = () => {
   const [showScanner, setShowScanner] = useState(false);
   const [scanMsg, setScanMsg] = useState('');
 
-  const recentTx = transactions.slice(0, 3);
+  // Faqat haqiqiy pul tushgan yoki yechilgan tranzaksiyalar (0 so'mlik oddiy xabarlar o'tmaydi)
+  const validTransactions = transactions.filter(
+    (t) => Math.abs(Number(t.amount || 0)) > 0 || Math.abs(Number(t.cashback_amount || 0)) > 0
+  );
+
+  const recentTx = validTransactions.slice(0, 3);
 
   const handleScan = async (qrData) => {
     setShowScanner(false);
@@ -124,7 +129,7 @@ const HomePage = () => {
                 <HiSparkles size={14} className="text-amber-300" />
                 <span>{station.cashback_percent}% keshbek</span>
               </div>
-              <div className="flex items-center gap-1.5 text-white/80 text-[12px] font-medium">
+              <div className="flex items-center gap-1.5 text-[#e8f5e9] text-[12px] font-medium">
                 <RiGasStationFill size={15} />
                 <span>{station.name}</span>
               </div>
@@ -157,11 +162,11 @@ const HomePage = () => {
           </div>
         </div>
 
-        {/* Oxirgi tranzaksiyalar */}
+        {/* Oxirgi tranzaksiyalar (Faqat haqiqiy pul tushgan/yechilgan amallar) */}
         <div className="flex justify-between items-center mb-3">
           <h3 className="text-[15px] font-semibold text-[#1a1a1a]">Oxirgi to'lovlar</h3>
           <span className="text-[13px] text-[#0f7b4c] font-medium">
-            {transactions.length} ta jami
+            {validTransactions.length} ta jami
           </span>
         </div>
 

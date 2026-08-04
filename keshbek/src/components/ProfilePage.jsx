@@ -90,9 +90,14 @@ const ProfilePage = () => {
   const [message, setMessage] = useState({ text: '', type: '' });
   const [loading, setLoading] = useState(false);
 
+  const now = new Date();
   const thisMonthCashback = transactions
-    .filter(t => new Date(t.created_at).getMonth() === new Date().getMonth())
-    .reduce((s, t) => s + Number(t.cashback_amount), 0);
+    .filter(t => {
+      const d = new Date(t.created_at);
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    })
+    .filter(t => Number(t.cashback_amount) > 0 || (t.type || '').toLowerCase() === 'cashback' || (t.type || '').toUpperCase() === 'EARN')
+    .reduce((s, t) => s + Number(t.cashback_amount || 0), 0);
 
   const copyCard = () => {
     navigator.clipboard.writeText(profile?.card_number ?? '').catch(() => { });
@@ -272,7 +277,7 @@ const ProfilePage = () => {
           <p className="text-[13px] font-black text-gray-900 leading-snug">
             {formatSum(thisMonthCashback)}
           </p>
-          <p className="text-gray-400 text-[11px] font-medium mt-0.5">Bu oy</p>
+          <p className="text-gray-400 text-[11px] font-medium mt-0.5 whitespace-nowrap">Oylik keshbek</p>
         </div>
 
         {/* To'lovlar */}
@@ -321,7 +326,7 @@ const ProfilePage = () => {
 
           {/* Ismni tahrirlash tugmasi */}
           <button
-            onClick={() => { setEditNameVal(profile?.name || ''); setShowEditName(true); }}
+            onClick={openEditNameModal}
             className="w-full flex items-center gap-3 px-4 py-4 text-left active:bg-gray-50 border-b border-gray-100"
           >
             <div className="w-9 h-9 bg-[#f0f7f4] rounded-xl flex items-center justify-center text-[#0f7b4c] border border-emerald-100">

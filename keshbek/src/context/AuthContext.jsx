@@ -81,47 +81,38 @@ export const AuthProvider = ({ children }) => {
     let currentSubscribedUserId = null;
 
     const setupProfileSubscription = (userId) => {
-      if (!userId || currentSubscribedUserId === userId) return;
+      if (!userId) return;
+      if (currentSubscribedUserId === userId && profileChannel) return;
 
       if (profileChannel) {
-        supabase.removeChannel(profileChannel);
+        try {
+          supabase.removeChannel(profileChannel);
+        } catch (e) {}
         profileChannel = null;
       }
 
       currentSubscribedUserId = userId;
-      const channel = supabase
-        .channel(`profile_changes_${userId}_${Date.now()}`)
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'profiles',
-            filter: `id=eq.${userId}`,
-          },
-          (payload) => {
-            if (payload.new) {
-              setProfile(payload.new);
-            }
+      const channel = supabase.channel(`profile_changes_${userId}`);
+      channel.on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'profiles',
+          filter: `id=eq.${userId}`,
+        },
+        (payload) => {
+          if (payload.new) {
+            setProfile(payload.new);
           }
-        );
+        }
+      );
 
       channel.subscribe();
       profileChannel = channel;
     };
 
-    // Joriy sessiyani tekshirish
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      const u = session?.user ?? null;
-      setUser(u);
-      if (u) {
-        loadProfile(u.id, u);
-        setupProfileSubscription(u.id);
-      }
-      setLoading(false);
-    });
-
-    // Auth o'zgarishlarini tinglash
+    // Auth o'zgarishlarini va sessiyani bir joyda tinglash
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
         const u = session?.user ?? null;
@@ -133,7 +124,9 @@ export const AuthProvider = ({ children }) => {
           setProfile(null);
           currentSubscribedUserId = null;
           if (profileChannel) {
-            supabase.removeChannel(profileChannel);
+            try {
+              supabase.removeChannel(profileChannel);
+            } catch (e) {}
             profileChannel = null;
           }
         }
@@ -143,7 +136,11 @@ export const AuthProvider = ({ children }) => {
 
     return () => {
       subscription.unsubscribe();
-      if (profileChannel) supabase.removeChannel(profileChannel);
+      if (profileChannel) {
+        try {
+          supabase.removeChannel(profileChannel);
+        } catch (e) {}
+      }
     };
   }, []);
 
@@ -304,7 +301,7 @@ export const AuthProvider = ({ children }) => {
 
   // Profil ismini yangilash (Ism va Familiyani alohida qabul qiladi)
   const updateProfileName = async (firstNameVal, lastNameVal = '') => {
-    if (!user) return { error: 'Tizimga kirmagansiz' };
+    if (!user && !profile) return { error: 'Tizimga kirmagansiz' };
 
     let cleanFirst = '';
     let cleanLast = '';
@@ -330,20 +327,59 @@ export const AuthProvider = ({ children }) => {
       last_name: cleanLast || null,
     };
 
-    let { error } = await supabase
-      .from('profiles')
-      .update(updatePayload)
-      .eq('id', user.id);
+    let targetId = profile?.id || user?.id;
+    let targetPhone = profile?.phone;
+    let updateSuccess = false;
+    let lastError = null;
 
-    if (error) {
-      // Supabase-da first_name/last_name ustunlari yo'q bo'lsa fallback
-      const fallback = await supabase
+    if (targetId) {
+      const { error } = await supabase
         .from('profiles')
-        .update({ name: fullName })
-        .eq('id', user.id);
-      if (fallback.error) return { error: fallback.error.message };
+        .update(updatePayload)
+        .eq('id', targetId);
+
+      if (!error) {
+        updateSuccess = true;
+      } else {
+        const fb = await supabase
+          .from('profiles')
+          .update({ name: fullName })
+          .eq('id', targetId);
+        if (!fb.error) updateSuccess = true;
+        else lastError = fb.error.message;
+      }
     }
-    await loadProfile(user.id);
+
+    if (!updateSuccess && targetPhone) {
+      const { error } = await supabase
+        .from('profiles')
+        .update(updatePayload)
+        .eq('phone', targetPhone);
+
+      if (!error) {
+        updateSuccess = true;
+      } else {
+        const fb = await supabase
+          .from('profiles')
+          .update({ name: fullName })
+          .eq('phone', targetPhone);
+        if (!fb.error) updateSuccess = true;
+        else lastError = fb.error.message;
+      }
+    }
+
+    // Har doim lokal profil holatini darhol yangilaymiz
+    setProfile(prev => ({
+      ...prev,
+      name: fullName,
+      first_name: cleanFirst || null,
+      last_name: cleanLast || null,
+    }));
+
+    if (targetId || user?.id) {
+      await loadProfile(targetId || user?.id);
+    }
+
     return { success: true };
   };
 
