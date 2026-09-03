@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 
 const DEFAULT_STATION = {
   name: 'Lukoil — Yunusobod',
@@ -19,24 +19,15 @@ export const useStationSettings = () => {
   const [loading, setLoading] = useState(true);
 
   const fetchStationSettings = async () => {
+    setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('station_settings')
-        .select('*')
-        .eq('id', 'main')
-        .maybeSingle();
-
-      if (!error && data) {
-        setStation({
-          ...DEFAULT_STATION,
-          ...data,
-          lat: data.lat || DEFAULT_STATION.lat,
-          lng: data.lng || DEFAULT_STATION.lng,
-          cashback_percent: data.cashback_percent ? parseFloat(data.cashback_percent) : DEFAULT_STATION.cashback_percent,
-        });
+      const response = await api.get('/station');
+      const data = response?.data || response;
+      if (data && typeof data === 'object') {
+        setStation({ ...DEFAULT_STATION, ...data });
       }
-    } catch (err) {
-      console.error('Station settings fetch error:', err);
+    } catch (e) {
+      console.error('Station settings xatosi:', e);
     } finally {
       setLoading(false);
     }
@@ -44,24 +35,6 @@ export const useStationSettings = () => {
 
   useEffect(() => {
     fetchStationSettings();
-
-    // Realtime — Super Admin o'zgartirganda darhol barcha sahifalarda yangilanadi
-    const channel = supabase
-      .channel('station_settings_global_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'station_settings',
-        },
-        () => fetchStationSettings()
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
   }, []);
 
   return { station, loading, refetch: fetchStationSettings };

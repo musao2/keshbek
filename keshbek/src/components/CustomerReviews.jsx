@@ -6,7 +6,6 @@ import {
   IoChevronDownOutline,
   IoChevronUpOutline
 } from 'react-icons/io5';
-import { supabase } from '../lib/supabase';
 
 // Tasdiqlangan mijozlarning dastlabki baho va sharhlari
 const DEFAULT_CUSTOMER_REVIEWS = [
@@ -70,20 +69,32 @@ const CustomerReviews = () => {
   }, []);
 
   const fetchStationReviews = async () => {
-    // 1. Supabase station_reviews jadvalidan olishga urinish
     try {
-      const { data, error } = await supabase
-        .from('station_reviews')
-        .select('*')
-        .order('created_at', { ascending: false });
+      const { api } = await import('../lib/api');
+      const response = await api.get('/station/reviews?page=1&limit=20');
+      
+      let data = response?.data || response;
+      if (data && data.reviews) {
+        data = data.reviews; // if it's paginated inside { reviews: [] }
+      }
 
-      if (!error && data && data.length > 0) {
-        setReviews((prev) => [...data, ...prev.filter((p) => !data.some((d) => d.id === p.id))]);
+      if (Array.isArray(data) && data.length > 0) {
+        // Map backend fields to frontend fields
+        const formattedReviews = data.map(r => ({
+          id: r.id || r._id || Math.random().toString(),
+          user_name: r.user_name || r.userName || r.name || r.customer_name || 'Mijoz',
+          rating: r.rating || 5,
+          comment: r.comment || r.text || r.review || '',
+          created_at: r.created_at || r.createdAt || new Date().toISOString(),
+        }));
+        setReviews(formattedReviews);
         return;
       }
-    } catch (e) {}
+    } catch (e) {
+      console.error('Sharhlarni olishda xatolik:', e);
+    }
 
-    // 2. Local storage dan olish (fallback)
+    // Fallback if API fails or returns empty
     try {
       const local = JSON.parse(localStorage.getItem('keshbek_station_reviews') || '[]');
       if (local && local.length > 0) {

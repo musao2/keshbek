@@ -1,404 +1,182 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
-  const [user,    setUser]    = useState(null);
+  const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Profil ma'lumotlarini yuklash
-  const loadProfile = async (userId, userObj = null) => {
-    if (!userId) return;
-
-    // 1. ID bo'yicha profilni yuklash
-    let { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .maybeSingle();
-
-    // 2. Agar ID bo'yicha topilmasa, telefon bo'yicha izlash
-    if (!data) {
-      const u = userObj || user;
-      let cleanPhone = null;
-      if (u?.phone) {
-        cleanPhone = u.phone;
-      } else if (u?.email) {
-        const phoneDigits = u.email.split('_')[0].split('@')[0].replace('+', '');
-        if (phoneDigits && /^\d+$/.test(phoneDigits)) {
-          cleanPhone = '+' + phoneDigits;
-        }
-      }
-
-      if (cleanPhone) {
-        const { data: phoneProfile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('phone', cleanPhone)
-          .maybeSingle();
-
-        if (phoneProfile) {
-          data = phoneProfile;
-          try {
-            await supabase.from('profiles').update({ id: userId }).eq('phone', cleanPhone);
-          } catch (e) {}
-        } else {
-          const cardNumber = 'KB-' + new Date().getFullYear() + '-' + Math.floor(Math.random() * 9000 + 1000);
-          const { data: createdProfile } = await supabase
-            .from('profiles')
-            .insert({
-              id:               userId,
-              name:             'Mijoz',
-              phone:            cleanPhone,
-              card_number:      cardNumber,
-              cashback_balance: 0,
-              level:            'Standart',
-            })
-            .select('*')
-            .maybeSingle();
-
-          if (createdProfile) data = createdProfile;
-        }
-      }
-    }
-
-    // 3. Agarda profil bor-u, karta raqami bo'sh bo'lsa -> karta raqam yaratamiz
-    if (data && !data.card_number) {
-      const cardNumber = 'KB-' + new Date().getFullYear() + '-' + Math.floor(Math.random() * 9000 + 1000);
-      try {
-        await supabase.from('profiles').update({ card_number: cardNumber }).eq('id', data.id);
-        data.card_number = cardNumber;
-      } catch (e) {}
-    }
-
-    if (data) setProfile(data);
-  };
-
+  // Dastlabki yuklanishda tokenni tekshirish va profilni yuklash
   useEffect(() => {
-    let profileChannel = null;
-    let currentSubscribedUserId = null;
-
-    const setupProfileSubscription = (userId) => {
-      if (!userId) return;
-      if (currentSubscribedUserId === userId && profileChannel) return;
-
-      if (profileChannel) {
+    const initializeAuth = async () => {
+      const token = localStorage.getItem('accessToken');
+      if (token) {
+        // Hozircha profilni yuklash logikasi (backenddan)
+        // Agar /users/me kabi endpoint bo'lsa, shu yerda chaqiriladi
+        // Hozircha faqat tokenni borligiga qarab user ni set qilamiz
         try {
-          supabase.removeChannel(profileChannel);
-        } catch (e) {}
-        profileChannel = null;
-      }
-
-      currentSubscribedUserId = userId;
-      const channel = supabase.channel(`profile_changes_${userId}`);
-      channel.on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'profiles',
-          filter: `id=eq.${userId}`,
-        },
-        (payload) => {
-          if (payload.new) {
-            setProfile(payload.new);
-          }
-        }
-      );
-
-      channel.subscribe();
-      profileChannel = channel;
-    };
-
-    // Auth o'zgarishlarini va sessiyani bir joyda tinglash
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        const u = session?.user ?? null;
-        setUser(u);
-        if (u) {
-          await loadProfile(u.id, u);
-          setupProfileSubscription(u.id);
-        } else {
+          const data = await api.get('/me'); 
+          const userData = data?.data || data;
+          setProfile(userData);
+          setUser(userData);
+        } catch (error) {
+          console.error("Token yaroqsiz", error);
+          localStorage.removeItem('accessToken');
+          localStorage.removeItem('refreshToken');
+          setUser(null);
           setProfile(null);
-          currentSubscribedUserId = null;
-          if (profileChannel) {
-            try {
-              supabase.removeChannel(profileChannel);
-            } catch (e) {}
-            profileChannel = null;
-          }
         }
-        setLoading(false);
       }
-    );
-
-    return () => {
-      subscription.unsubscribe();
-      if (profileChannel) {
-        try {
-          supabase.removeChannel(profileChannel);
-        } catch (e) {}
-      }
+      setLoading(false);
     };
+
+    initializeAuth();
   }, []);
 
-  // OTP tasdiqlash va tizimga kirish (yoki ro'yxatdan o'tish)
-  const verifyOTPAndLogin = async (phone, code, name = '') => {
-    const cleanPhone = phone.trim();
-    const cleanCode = code.trim();
-
-    // 1. otp_codes jadvalidan kodni olish va tekshirish
-    const { data: otpData, error: otpError } = await supabase
-      .from('otp_codes')
-      .select('*')
-      .eq('phone', cleanPhone)
-      .maybeSingle();
-
-    if (otpError) {
-      return { error: 'Ulanish xatosi: ' + otpError.message };
+  const sendOTP = async (phone) => {
+    try {
+      // Backendga OTP jo'natish so'rovi
+      await api.post('/auth/otp/send', { phone });
+      return { success: true };
+    } catch (error) {
+      return { error: error.message || 'OTP yuborishda xatolik yuz berdi' };
     }
+  };
 
-    if (!otpData) {
-      return { error: 'Keshbek uchun kod yuborilmagan yoki topilmadi.' };
-    }
+  const verifyOTPAndLogin = async (phone, code, firstName = '', lastName = '') => {
+    try {
+      const cleanPhone = phone.trim();
+      const cleanCode = code.trim();
+      
+      const fName = firstName.trim() || 'User';
+      const lName = lastName.trim() || '';
+      const fullName = `${fName} ${lName}`.trim();
 
-    // Kod muddati o'tganligini tekshirish
-    if (new Date(otpData.expires_at) < new Date()) {
-      return { error: 'Tasdiqlash kodining vaqti o\'tgan. Qayta kod yuboring.' };
-    }
-
-    // Kodni tekshirish
-    if (otpData.code !== cleanCode) {
-      return { error: 'Kiritilgan tasdiqlash kodi noto\'g\'ri!' };
-    }
-
-    // Ishlatilgan kodni o'chirib tashlaymiz
-    await supabase.from('otp_codes').delete().eq('phone', cleanPhone);
-
-    // 2. Supabase auth tizimi uchun telefon raqam va parol
-    const phoneDigits = cleanPhone.replace('+', '');
-    const password = `OtpSecretPasswordFor_${phoneDigits}`;
-
-    let finalName = name?.trim() || '';
-    let finalFirstName = '';
-    let finalLastName = '';
-
-    if (finalName) {
-      const parts = finalName.split(' ');
-      finalFirstName = parts[0] || '';
-      finalLastName = parts.slice(1).join(' ') || '';
-    }
-
-    // 3. Tizimga kirishga urinish (Supabase Auth)
-    let userId = null;
-    const email = `${phoneDigits}@keshbak.uz`;
-
-    // 1-qadam: Kirish (Sign In)
-    let { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (!signInError && signInData?.user) {
-      userId = signInData.user.id;
-    } else {
-      // 2-qadam: Ro'yxatdan o'tish (Sign Up)
-      let { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-        email,
-        password,
+      // OTP ni tekshirish va login qilish
+      const response = await api.post('/auth/otp/verify', {
+        phone: cleanPhone,
+        code: cleanCode,
+        firstName: fName,
+        lastName: lName,
+        name: fullName
       });
 
-      if (signUpData?.user) {
-        userId = signUpData.user.id;
-        if (!signUpData.session) {
-          const reSignIn = await supabase.auth.signInWithPassword({ email, password });
-          if (reSignIn.data?.user) userId = reSignIn.data.user.id;
+      // Backenddan tokenlar keladi
+      let accessToken = null;
+      let refreshToken = null;
+
+      if (typeof response === 'string') {
+        accessToken = response;
+      } else if (response) {
+        accessToken = response.accessToken || response.access_token || response.token ||
+                      (response.tokens && (response.tokens.accessToken || response.tokens.access_token || (response.tokens.access && response.tokens.access.token))) ||
+                      (response.data && (response.data.accessToken || response.data.access_token || response.data.token));
+                      
+        refreshToken = response.refreshToken || response.refresh_token ||
+                       (response.tokens && (response.tokens.refreshToken || response.tokens.refresh_token || (response.tokens.refresh && response.tokens.refresh.token))) ||
+                       (response.data && (response.data.refreshToken || response.data.refresh_token));
+      }
+
+      if (accessToken) {
+        localStorage.setItem('accessToken', accessToken);
+        if (refreshToken) {
+          localStorage.setItem('refreshToken', refreshToken);
         }
-      } else if (signUpError) {
-        // Agar ushbu email allaqachon ro'yxatdan o'tgan bo'lsa (User already registered), muqobil akkaunt bilan bog'laymiz
-        if (signUpError.message.includes('already registered') || signUpError.message.includes('already exists')) {
-          const altEmail = `${phoneDigits}_v2@keshbak.uz`;
-          const altSignUp = await supabase.auth.signUp({ email: altEmail, password });
-          if (altSignUp.data?.user) {
-            userId = altSignUp.data.user.id;
-            if (!altSignUp.session) {
-              const reSignIn = await supabase.auth.signInWithPassword({ email: altEmail, password });
-              if (reSignIn.data?.user) userId = reSignIn.data.user.id;
-            }
-          } else {
-            const altSignIn = await supabase.auth.signInWithPassword({ email: altEmail, password });
-            if (altSignIn.data?.user) {
-              userId = altSignIn.data.user.id;
-            } else {
-              return { error: 'Tizimga kirishda xatolik yuz berdi. Qayta urinib ko\'ring.' };
-            }
-          }
-        } else {
-          return { error: signUpError.message };
-        }
+        
+        const userData = response.user || (response.data && response.data.user) || { id: 'dummy_user', phone: cleanPhone };
+        setUser(userData);
+        setProfile(userData);
+
+        // Tokendan keyin to'liq profilni ham bitta chaqirib qo'yishimiz mumkin:
+        refreshProfile();
+        
+        return { success: true };
+      } else {
+        console.error("Login response to'liq ko'rinishi:", response);
+        return { error: 'Token olinmadi. Iltimos qaytadan urinib koring. Konsolni tekshiring (F12).' };
       }
+
+    } catch (error) {
+      return { error: error.message || 'Tasdiqlashda xatolik yuz berdi' };
     }
-
-    if (!userId) {
-      return { error: 'Tizimga kirishda kutilmagan xatolik yuz berdi.' };
-    }
-
-    // 4. Profil mavjudligini tekshirish va yaratish / yangilash
-    const { data: profileExists } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('phone', cleanPhone)
-      .maybeSingle();
-
-    const cardNumber = profileExists?.card_number || ('KB-' + new Date().getFullYear() + '-' + Math.floor(Math.random() * 9000 + 1000));
-
-    if (!profileExists) {
-      const payload = {
-        id:               userId,
-        name:             finalName || 'Mijoz',
-        phone:            cleanPhone,
-        card_number:      cardNumber,
-        cashback_balance: 0,
-        level:            'Standart',
-      };
-      if (finalFirstName) payload.first_name = finalFirstName;
-      if (finalLastName) payload.last_name = finalLastName;
-
-      let { error: insertErr } = await supabase.from('profiles').insert(payload);
-      if (insertErr) {
-        // agar first_name/last_name ustunlari DB ga qo'shilmagan bo'lsa fallback
-        delete payload.first_name;
-        delete payload.last_name;
-        await supabase.from('profiles').insert(payload);
-      }
-    } else {
-      const hasNoName = !profileExists.name;
-      const isDefaultName = profileExists.name === 'Mijoz';
-
-      const updateData = {
-        id: userId,
-        card_number: cardNumber,
-      };
-      if (finalName && (hasNoName || isDefaultName)) {
-        updateData.name = finalName;
-        if (finalFirstName) updateData.first_name = finalFirstName;
-        if (finalLastName) updateData.last_name = finalLastName;
-      }
-
-      let { error: updErr } = await supabase.from('profiles').update(updateData).eq('phone', cleanPhone);
-      if (updErr) {
-        delete updateData.first_name;
-        delete updateData.last_name;
-        await supabase.from('profiles').update(updateData).eq('phone', cleanPhone);
-      }
-    }
-
-    await loadProfile(userId, { email, phone: cleanPhone });
-    return { success: true };
   };
 
-  // Profil ismini yangilash (Ism va Familiyani alohida qabul qiladi)
-  const updateProfileName = async (firstNameVal, lastNameVal = '') => {
-    if (!user && !profile) return { error: 'Tizimga kirmagansiz' };
+  const updateProfileName = async (nameData) => {
+    console.log("[AuthContext] updateProfileName ishga tushdi:", nameData);
+    try {
+      let fName = '';
+      let lName = '';
+      let fullName = '';
 
-    let cleanFirst = '';
-    let cleanLast = '';
-
-    if (typeof firstNameVal === 'object' && firstNameVal !== null) {
-      cleanFirst = (firstNameVal.firstName || firstNameVal.first_name || '').trim();
-      cleanLast = (firstNameVal.lastName || firstNameVal.last_name || '').trim();
-    } else if (typeof firstNameVal === 'string' && lastNameVal) {
-      cleanFirst = firstNameVal.trim();
-      cleanLast = lastNameVal.trim();
-    } else if (typeof firstNameVal === 'string') {
-      const parts = firstNameVal.trim().split(' ');
-      cleanFirst = parts[0] || '';
-      cleanLast = parts.slice(1).join(' ') || '';
-    }
-
-    const fullName = [cleanFirst, cleanLast].filter(Boolean).join(' ').trim();
-    if (!fullName) return { error: 'Ism bo\'sh bo\'lishi mumkin emas' };
-
-    const updatePayload = {
-      name: fullName,
-      first_name: cleanFirst || null,
-      last_name: cleanLast || null,
-    };
-
-    let targetId = profile?.id || user?.id;
-    let targetPhone = profile?.phone;
-    let updateSuccess = false;
-    let lastError = null;
-
-    if (targetId) {
-      const { error } = await supabase
-        .from('profiles')
-        .update(updatePayload)
-        .eq('id', targetId);
-
-      if (!error) {
-        updateSuccess = true;
+      if (typeof nameData === 'string') {
+        fullName = nameData.trim();
+        const parts = fullName.split(' ');
+        fName = parts[0] || '';
+        lName = parts.slice(1).join(' ') || '';
       } else {
-        const fb = await supabase
-          .from('profiles')
-          .update({ name: fullName })
-          .eq('id', targetId);
-        if (!fb.error) updateSuccess = true;
-        else lastError = fb.error.message;
+        fName = nameData.firstName?.trim() || '';
+        lName = nameData.lastName?.trim() || '';
+        fullName = `${fName} ${lName}`.trim();
       }
+
+      console.log("[AuthContext] PATCH /me yuborilmoqda:", { firstName: fName, lastName: lName, name: fullName });
+      
+      const response = await api.patch('/me', {
+        firstName: fName,
+        lastName: lName,
+        name: fullName
+      });
+      
+      console.log("[AuthContext] PATCH /me javobi:", response);
+
+      // React stateni darhol yangilaymiz ki modal yopilsin
+      setProfile(prev => prev ? { ...prev, name: fullName, firstName: fName, lastName: lName } : null);
+      setUser(prev => prev ? { ...prev, name: fullName, firstName: fName, lastName: lName } : null);
+
+      console.log("[AuthContext] refreshProfile() chaqirilmoqda...");
+      await refreshProfile();
+      console.log("[AuthContext] Profil yangilandi!");
+      
+      return { success: true };
+    } catch (error) {
+      console.error("[AuthContext] XATOLIK ushlandi:", error);
+      return { error: error.message || 'Profilni yangilashda xatolik yuz berdi' };
     }
-
-    if (!updateSuccess && targetPhone) {
-      const { error } = await supabase
-        .from('profiles')
-        .update(updatePayload)
-        .eq('phone', targetPhone);
-
-      if (!error) {
-        updateSuccess = true;
-      } else {
-        const fb = await supabase
-          .from('profiles')
-          .update({ name: fullName })
-          .eq('phone', targetPhone);
-        if (!fb.error) updateSuccess = true;
-        else lastError = fb.error.message;
-      }
-    }
-
-    // Har doim lokal profil holatini darhol yangilaymiz
-    setProfile(prev => ({
-      ...prev,
-      name: fullName,
-      first_name: cleanFirst || null,
-      last_name: cleanLast || null,
-    }));
-
-    if (targetId || user?.id) {
-      await loadProfile(targetId || user?.id);
-    }
-
-    return { success: true };
   };
 
-  // Chiqish
   const signOut = async () => {
-    await supabase.auth.signOut();
+    try {
+      await api.post('/auth/logout', {});
+    } catch (e) {
+      console.error(e);
+    }
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
+    setUser(null);
+    setProfile(null);
   };
 
-  // Balansni yangilash
   const refreshProfile = async () => {
-    if (user) await loadProfile(user.id);
+    try {
+      const token = localStorage.getItem('accessToken');
+      if (token) {
+        const data = await api.get('/me');
+        const userData = data?.data || data;
+        setProfile(userData);
+        setUser(userData);
+      }
+    } catch (e) {
+      console.error("Profilni yangilashda xatolik", e);
+    }
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, verifyOTPAndLogin, updateProfileName, signOut, refreshProfile }}>
+    <AuthContext.Provider value={{ user, profile, loading, sendOTP, verifyOTPAndLogin, updateProfileName, signOut, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   );
 };
 
 export const useAuth = () => useContext(AuthContext);
-

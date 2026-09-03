@@ -16,26 +16,41 @@ const AppContent = () => {
   const [activeTab, setActiveTab] = useState('home');
   
   // Majburiy ism so'rash state'lari
-  const [mandatoryName, setMandatoryName] = useState('');
-  const [nameError, setNameError]         = useState('');
-  const [savingName, setSavingName]       = useState(false);
+  const [mandatoryFirstName, setMandatoryFirstName] = useState('');
+  const [mandatoryLastName, setMandatoryLastName] = useState('');
+  const [nameError, setNameError] = useState('');
+  const [savingName, setSavingName] = useState(false);
 
-  const userDisplayName = profile?.name;
+  const userDisplayName = profile?.name || profile?.firstName || profile?.first_name;
   const isNameMissing = profile && (!userDisplayName || userDisplayName.trim() === '' || userDisplayName === 'Mijoz' || userDisplayName === 'Noma\'lum Mijoz');
 
   const handleSaveMandatoryName = async (e) => {
     e.preventDefault();
-    if (!mandatoryName.trim()) {
-      setNameError('Iltimos, ism va familiyangizni kiriting!');
+    console.log("[App] handleSaveMandatoryName bosildi", { mandatoryFirstName, mandatoryLastName });
+    
+    if (!mandatoryFirstName.trim() || !mandatoryLastName.trim()) {
+      setNameError('Iltimos, ism va familiyangizni to\'liq kiriting!');
       return;
     }
+    
     setSavingName(true);
-    const res = await updateProfileName(mandatoryName.trim());
+    const res = await updateProfileName({
+      firstName: mandatoryFirstName.trim(),
+      lastName: mandatoryLastName.trim()
+    });
+    
     setSavingName(false);
+    
     if (res?.error) {
+      console.log("[App] Xatolik bor:", res.error);
       setNameError(res.error);
     } else {
+      console.log("[App] Xatolik yo'q, ism yangilandi!");
       setNameError('');
+      // Vaqtincha manual yopib qo'yish (re-render orqali o'zi yopilishi kerak)
+      if (profile) {
+        profile.name = mandatoryFirstName.trim() + " " + mandatoryLastName.trim();
+      }
     }
   };
 
@@ -81,11 +96,19 @@ const AppContent = () => {
             <form onSubmit={handleSaveMandatoryName} className="w-full flex flex-col gap-3">
               <input
                 type="text"
-                placeholder="Ism va familiyangiz"
-                value={mandatoryName}
-                onChange={e => setMandatoryName(e.target.value)}
+                placeholder="Ismingiz (Majburiy)"
+                value={mandatoryFirstName}
+                onChange={e => setMandatoryFirstName(e.target.value)}
                 required
                 autoFocus
+                className="w-full h-12 px-4 bg-gray-50 border border-gray-200 rounded-xl text-[14px] outline-none focus:border-[#0f7b4c] text-center font-bold text-gray-800 transition-colors"
+              />
+              <input
+                type="text"
+                placeholder="Familiyangiz (Majburiy)"
+                value={mandatoryLastName}
+                onChange={e => setMandatoryLastName(e.target.value)}
+                required
                 className="w-full h-12 px-4 bg-gray-50 border border-gray-200 rounded-xl text-[14px] outline-none focus:border-[#0f7b4c] text-center font-bold text-gray-800 transition-colors"
               />
               {nameError && (

@@ -9,7 +9,6 @@ import {
   IoTimeOutline
 } from 'react-icons/io5';
 import { useAuth } from '../context/AuthContext';
-import { supabase } from '../lib/supabase';
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000; // 1 hafta (7 kun) millisonaniiyada
 
@@ -30,7 +29,28 @@ const PostPaymentReviewModal = ({ isOpen, onClose }) => {
   }, [isOpen, user]);
 
   const checkWeeklyLimit = async () => {
-    // 1. LocalStorage orqali tezkor tekshiruv
+    try {
+      const { api } = await import('../lib/api');
+      // Backend API orqali tekshiramiz
+      const response = await api.get('/station/reviews/can-review');
+      const data = response?.data || response;
+      
+      // Agar backend `false` qaytarsa, demak allaqachon sharh qoldirgan
+      if (data && data.canReview === false) {
+        setAlreadyReviewedThisWeek(true);
+        setDaysRemaining(data.daysRemaining || 7);
+        return;
+      }
+    } catch (e) {
+      console.error('Weekly limit check error:', e);
+      // Backend xato bersa, limitga tushib qolgan bo'lishi mumkin (masalan 403)
+      if (e.message && e.message.includes('403')) {
+        setAlreadyReviewedThisWeek(true);
+        return;
+      }
+    }
+
+    // 2. LocalStorage orqali tezkor tekshiruv (Fallback)
     const lastReviewTs = localStorage.getItem(`keshbek_last_review_at_${user?.id}`);
     if (lastReviewTs) {
       const elapsed = Date.now() - parseInt(lastReviewTs, 10);
@@ -41,28 +61,6 @@ const PostPaymentReviewModal = ({ isOpen, onClose }) => {
         return;
       }
     }
-
-    // 2. Supabase station_reviews jadvalidan oxirgi sharh vaqtini tekshirish
-    try {
-      const { data, error } = await supabase
-        .from('station_reviews')
-        .select('created_at')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(1);
-
-      if (!error && data && data.length > 0) {
-        const lastDate = new Date(data[0].created_at).getTime();
-        const elapsed = Date.now() - lastDate;
-        if (elapsed < SEVEN_DAYS_MS) {
-          const daysLeft = Math.ceil((SEVEN_DAYS_MS - elapsed) / (1000 * 3600 * 24));
-          setDaysRemaining(daysLeft);
-          setAlreadyReviewedThisWeek(true);
-          localStorage.setItem(`keshbek_last_review_at_${user.id}`, lastDate.toString());
-          return;
-        }
-      }
-    } catch (e) {}
 
     setAlreadyReviewedThisWeek(false);
   };
@@ -75,45 +73,30 @@ const PostPaymentReviewModal = ({ isOpen, onClose }) => {
 
     setSubmitting(true);
 
-    const reviewPayload = {
-      id: 'rev-' + Date.now(),
-      user_id: user?.id || 'guest',
-      user_name: profile?.name || 'Mijoz',
-      rating: rating,
-      comment: comment.trim(),
-      created_at: new Date().toISOString(),
-    };
-
-    // 1. Supabase station_reviews jadvaliga saqlash
     try {
-      await supabase
-        .from('station_reviews')
-        .insert([{
-          user_id: user?.id || 'guest',
-          user_name: profile?.name || 'Mijoz',
-          rating: rating,
-          comment: comment.trim(),
-          created_at: new Date().toISOString(),
-        }]);
-    } catch (e) {}
+      const { api } = await import('../lib/api');
+      // Backend API orqali saqlash
+      await api.post('/station/reviews', {
+        rating: rating,
+        comment: comment.trim()
+      });
 
-    // 2. Local storage-ga saqlash va haftalik cheklov taymerini o'rnatish
-    try {
-      const existingLocal = JSON.parse(localStorage.getItem('keshbek_station_reviews') || '[]');
-      localStorage.setItem('keshbek_station_reviews', JSON.stringify([reviewPayload, ...existingLocal]));
+      // Local storage-ga saqlash (fallback/tezkor check uchun)
       if (user?.id) {
         localStorage.setItem(`keshbek_last_review_at_${user.id}`, Date.now().toString());
       }
-    } catch (e) {}
+    } catch (e) {
+      console.error('Review yuborishda xatolik:', e);
+    } finally {
+      setSubmitting(false);
+      setSubmitted(true);
 
-    setSubmitting(false);
-    setSubmitted(true);
-
-    setTimeout(() => {
-      setSubmitted(false);
-      setComment('');
-      onClose();
-    }, 2500);
+      setTimeout(() => {
+        setSubmitted(false);
+        setComment('');
+        onClose();
+      }, 2500);
+    }
   };
 
   return (

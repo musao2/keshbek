@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { supabase } from '../lib/supabase';
 import { useAuth } from './AuthContext';
 
 const NotificationContext = createContext(null);
@@ -107,21 +106,13 @@ export const NotificationProvider = ({ children }) => {
 
     setLoading(true);
     try {
-      // 1. Fetch from 'notifications' table (SMS va ommaviy xabarnomalar)
-      const { data: notifData } = await supabase
-        .from('notifications')
-        .select('*')
-        .or(`user_id.eq.${user.id},user_id.is.null`)
-        .order('created_at', { ascending: false });
-
-      // 2. Fetch from 'transactions' table (haqiqiy keshbek tushganda/yechilganda)
-      const { data: txData } = await supabase
-        .from('transactions')
-        .select('*')
-        .eq('user_id', user.id)
-        .or('amount.gt.0,cashback_amount.neq.0')
-        .order('created_at', { ascending: false });
-
+      // API orqali bildirishnomalarni olish
+      // const notifData = await api.get('/notifications');
+      // const txData = await api.get('/me/transactions');
+      
+      const notifData = [];
+      const txData = [];
+      
       const readMap = getReadNotificationMap();
       const now = Date.now();
       const updatedReadMap = { ...readMap };
@@ -240,101 +231,12 @@ export const NotificationProvider = ({ children }) => {
     );
   };
 
-  // Real-time obuna (notifications va transactions jadvallariga)
+  // Supabase o'chirildi, shuning uchun real-time obunalar hozircha o'chirildi.
+  // Kelajakda WebSocket (Socket.io) orqali ulash mumkin.
   useEffect(() => {
-    if (!user?.id) {
-      setNotifications([]);
-      return;
+    if (user?.id) {
+      fetchNotifications();
     }
-
-    fetchNotifications();
-
-    let channel = null;
-    try {
-      const channelName = `realtime_user_notif_${user.id}_${Date.now()}`;
-      channel = supabase.channel(channelName);
-      
-      // 1. Realtime notification table insert
-      channel.on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'notifications',
-        },
-        (payload) => {
-          const n = payload.new;
-          if (n.user_id && n.user_id !== user.id) return;
-          playNotificationSound();
-          triggerVibration();
-
-          const newNotif = {
-            id: n.id,
-            user_id: n.user_id,
-            title: n.title || "Yangi Xabarnoma 🔔",
-            message: n.message || "",
-            category: n.category || "AKSIYA",
-            amount: 0,
-            is_read: false,
-            created_at: n.created_at
-          };
-
-          setLatestToast(newNotif);
-          setTimeout(() => setLatestToast(null), 5000);
-          setNotifications((prev) => [newNotif, ...prev.filter((item) => item.id !== newNotif.id)]);
-        }
-      );
-
-      // 2. Realtime transaction table insert (> 0 amount)
-      channel.on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'transactions',
-          filter: `user_id=eq.${user.id}`,
-        },
-        (payload) => {
-          const tx = payload.new;
-          const amtVal = Math.abs(Number(tx.cashback_amount || tx.amount || 0));
-          if (amtVal === 0) return; // Skip zero amount SMS
-
-          playNotificationSound();
-          triggerVibration();
-
-          const isKirim = Number(tx.cashback_amount ?? tx.amount ?? 0) >= 0;
-          let msgText = tx.qr_data || tx.comment || tx.description || '';
-          if (msgText.startsWith('{"') || msgText.startsWith('http') || !msgText) {
-            msgText = isKirim ? "Hisobingizga pul o'tkazildi" : "Keshbek ishlatildi";
-          }
-
-          const newNotif = {
-            id: `tx_${tx.id}`,
-            user_id: tx.user_id,
-            title: isKirim ? "Kartangizga pul tushdi! 💳" : "Keshbek yechib olindi 💳",
-            message: msgText,
-            amount: amtVal,
-            is_read: false,
-            created_at: tx.created_at
-          };
-
-          setLatestToast(newNotif);
-          setTimeout(() => setLatestToast(null), 5000);
-
-          setNotifications((prev) => [newNotif, ...prev.filter((n) => n.id !== newNotif.id)]);
-        }
-      );
-
-      channel.subscribe();
-    } catch (e) {}
-
-    return () => {
-      if (channel) {
-        try {
-          supabase.removeChannel(channel);
-        } catch (e) {}
-      }
-    };
   }, [user?.id, fetchNotifications]);
 
   return (

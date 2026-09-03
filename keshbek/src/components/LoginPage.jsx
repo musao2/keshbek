@@ -1,19 +1,19 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useStationSettings } from '../hooks/useStationSettings';
-import { sendOTPViaTelegram as sendOTP } from '../lib/telegramBot';
 import { BsFuelPump } from 'react-icons/bs';
 import { IoPhonePortraitOutline, IoKeyOutline, IoArrowBackOutline, IoPersonOutline, IoSendOutline } from 'react-icons/io5';
 
 const LoginPage = () => {
-  const { verifyOTPAndLogin } = useAuth();
+  const { sendOTP, verifyOTPAndLogin } = useAuth();
   const { station } = useStationSettings();
 
   const [mode, setMode]       = useState('login'); // 'login' | 'register'
   const [step, setStep]       = useState(1);       // 1: Telefon/Ism kiritish, 2: Kod kiritish
   
   const [phone, setPhone]     = useState('+998');
-  const [name, setName]       = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName]   = useState('');
   const [code, setCode]       = useState('');
   
   const [error, setError]     = useState('');
@@ -61,14 +61,15 @@ const LoginPage = () => {
     e.preventDefault();
     setError('');
 
-    const cleanPhone = '+' + phone.replace(/\D/g, '');
+    // Backend ga raqamni + belgisiz (masalan 998901234567) ko'rinishida yuboramiz
+    const cleanPhone = phone.replace(/\D/g, '');
     if (!validatePhone(cleanPhone)) {
       setError('Telefon raqamini to\'liq kiriting. Namuna: +998 90 123 45 67');
       return;
     }
 
-    if (mode === 'register' && !name.trim()) {
-      setError('Iltimos, ismingizni kiriting.');
+    if (mode === 'register' && (!firstName.trim() || !lastName.trim())) {
+      setError('Iltimos, ism va familiyangizni to\'liq kiriting.');
       return;
     }
 
@@ -95,8 +96,9 @@ const LoginPage = () => {
     }
 
     setLoading(true);
-    const cleanPhone = '+' + phone.replace(/\D/g, '');
-    const res = await verifyOTPAndLogin(cleanPhone, code, name);
+    // Backend ga raqamni + belgisiz (masalan 998901234567) ko'rinishida yuboramiz
+    const cleanPhone = phone.replace(/\D/g, '');
+    const res = await verifyOTPAndLogin(cleanPhone, code, firstName, lastName);
     setLoading(false);
 
     if (res.error) {
@@ -146,17 +148,30 @@ const LoginPage = () => {
           <form onSubmit={handleSendCode} className="flex flex-col gap-4">
             
             {mode === 'register' && (
-              <div className="relative">
-                <IoPersonOutline size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Ismingiz va familiyangiz"
-                  value={name}
-                  onChange={e => setName(e.target.value)}
-                  required
-                  className="w-full h-12 pl-10 pr-4 bg-gray-50 border border-gray-200 rounded-xl text-[14px] font-semibold text-gray-800 outline-none focus:border-[#0f7b4c] transition-colors"
-                />
-              </div>
+              <>
+                <div className="relative">
+                  <IoPersonOutline size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Ismingiz"
+                    value={firstName}
+                    onChange={e => setFirstName(e.target.value)}
+                    required
+                    className="w-full h-12 pl-10 pr-4 bg-gray-50 border border-gray-200 rounded-xl text-[14px] font-semibold text-gray-800 outline-none focus:border-[#0f7b4c] transition-colors"
+                  />
+                </div>
+                <div className="relative">
+                  <IoPersonOutline size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Familiyangiz"
+                    value={lastName}
+                    onChange={e => setLastName(e.target.value)}
+                    required
+                    className="w-full h-12 pl-10 pr-4 bg-gray-50 border border-gray-200 rounded-xl text-[14px] font-semibold text-gray-800 outline-none focus:border-[#0f7b4c] transition-colors"
+                  />
+                </div>
+              </>
             )}
 
             <div className="relative">
@@ -173,8 +188,18 @@ const LoginPage = () => {
             </div>
 
             {error && (
-              <div className="bg-red-50 border border-red-100 rounded-xl px-4 py-2.5 text-red-500 text-[12px] font-medium leading-snug">
-                {error}
+              <div className="bg-red-50 border border-red-100 rounded-xl px-4 py-3 text-red-600 text-[13px] font-medium leading-snug flex flex-col gap-2">
+                <span>{error}</span>
+                {error.toLowerCase().includes('telegram') && (
+                  <a
+                    href="https://t.me/Keshbakbot"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center bg-[#2AABEE] text-white px-3 py-2 rounded-lg font-bold text-[13px] shadow-sm hover:bg-[#229ED9] transition-colors mt-1"
+                  >
+                    Telegram botga o'tish
+                  </a>
+                )}
               </div>
             )}
 
@@ -244,8 +269,18 @@ const LoginPage = () => {
             </div>
 
             {error && (
-              <div className="bg-red-50 border border-red-100 rounded-xl px-4 py-2.5 text-red-500 text-[12px] font-medium leading-snug">
-                {error}
+              <div className="bg-red-50 border border-red-100 rounded-xl px-4 py-3 text-red-600 text-[13px] font-medium leading-snug flex flex-col gap-2">
+                <span>{error}</span>
+                {error.toLowerCase().includes('telegram') && (
+                  <a
+                    href="https://t.me/Keshbakbot"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center bg-[#2AABEE] text-white px-3 py-2 rounded-lg font-bold text-[13px] shadow-sm hover:bg-[#229ED9] transition-colors mt-1"
+                  >
+                    Telegram botga o'tish
+                  </a>
+                )}
               </div>
             )}
 

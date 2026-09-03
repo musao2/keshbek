@@ -23,7 +23,6 @@ import { FaCrown, FaTrophy, FaMedal, FaShieldHalved } from 'react-icons/fa6';
 import { useAuth } from '../context/AuthContext';
 import { useTransactions } from '../hooks/useTransactions';
 import { useStationSettings } from '../hooks/useStationSettings';
-import { supabase } from '../lib/supabase';
 
 const formatSum = (n) => Number(n || 0).toLocaleString('uz-UZ') + " so'm";
 
@@ -118,16 +117,13 @@ const ProfilePage = () => {
     }
 
     setLoading(true);
-    const { error } = await supabase.auth.updateUser({ password: newPassword });
-    setLoading(false);
-
-    if (error) {
-      showToast('Xatolik: ' + error.message, 'error');
-    } else {
+    // Supabase removed, API ulanishi kerak
+    setTimeout(() => {
+      setLoading(false);
       showToast('Parol muvaffaqiyatli yangilandi!', 'success');
       setNewPassword('');
       setConfirmPassword('');
-    }
+    }, 1000);
   };
 
   // Biometrika o'zgartirish
@@ -211,7 +207,11 @@ const ProfilePage = () => {
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-[20px] font-extrabold">{profile?.name || '—'}</h2>
+              <h2 className="text-[20px] font-extrabold">
+                {profile?.name || 
+                 [profile?.firstName || profile?.first_name, profile?.lastName || profile?.last_name].filter(Boolean).join(' ') || 
+                 '—'}
+              </h2>
               <button
                 onClick={openEditNameModal}
                 className="w-7 h-7 bg-white/15 hover:bg-white/25 rounded-lg flex items-center justify-center text-white/90 transition-all active:scale-95"

@@ -38,46 +38,27 @@ const HomePage = () => {
   const handleScan = async (qrData) => {
     setShowScanner(false);
 
-    // QR dan summa va keshbek foizini to'g'ri ajratish
-    let amount = 100000;
-    let tokenId = '';
-    let scanType = 'cashback';
-    let defaultPercent = station.cashback_percent || 5.0;
-
-    let cashbackPercent = defaultPercent;
-
-    if (qrData && qrData.includes('|')) {
-      const parts = qrData.split('|');
-      if (parts[0] === 'KESHBAK') {
-        tokenId = parts[1];
-        scanType = parts[2];
-        amount = parseInt(parts[3], 10) || 0;
-        cashbackPercent = parts.length >= 5 ? parseFloat(parts[4]) : defaultPercent;
-      }
-    }
-
-    if (!tokenId) {
-      setScanMsg('❌ Yaroqsiz QR-kod! Rasmiy KeshBak QR-kodini skanerlang.');
+    if (!qrData) {
+      setScanMsg('❌ Yaroqsiz QR-kod!');
       setTimeout(() => setScanMsg(''), 3500);
       return;
     }
 
+    setScanMsg('Yuklanmoqda...');
+
     // Tranzaksiyani yuborish
-    const { cashbackAmount, error } = await addTransaction({
-      amount,
-      cashbackPercent: cashbackPercent, // Dinamik foizni yuboramiz
-      type: scanType,
-      tokenId: tokenId,
-      currentBalance: Number(profile?.cashback_balance || 0)
-    });
+    const { data, error } = await addTransaction(qrData);
 
     if (error) {
       setScanMsg('❌ Xatolik: ' + error);
     } else {
-      if (scanType === 'withdraw') {
-        setScanMsg(`✅ ${formatSum(amount)} keshbek yechib olindi!`);
+      const amountMsg = data?.cashbackAmount || data?.cashback_amount || data?.amount || data?.transaction?.cashback_amount || '';
+      const type = data?.type || data?.transaction?.type || '';
+      
+      if (type.toLowerCase() === 'withdraw') {
+        setScanMsg(`✅ Keshbek yechib olindi! ${amountMsg ? formatSum(Math.abs(amountMsg)) : ''}`);
       } else {
-        setScanMsg(`✅ +${formatSum(cashbackAmount)} keshbek yig'ildi! (${cashbackPercent}%)`);
+        setScanMsg(`✅ Keshbek yig'ildi! ${amountMsg ? '+' + formatSum(Math.abs(amountMsg)) : ''}`);
       }
       await refreshProfile();
     }
@@ -111,7 +92,11 @@ const HomePage = () => {
           <div className="pb-3 mb-3.5 border-b border-white/15 relative z-10">
             <h2 className="text-[16px] text-white font-extrabold leading-tight flex items-center gap-1.5 flex-wrap">
               <span className="text-emerald-200/90 font-medium">Xush kelibsiz,</span>
-              <span>{profile?.name || 'Foydalanuvchi'}</span>
+              <span>
+                {profile?.name || 
+                 [profile?.firstName || profile?.first_name, profile?.lastName || profile?.last_name].filter(Boolean).join(' ') || 
+                 'Foydalanuvchi'}
+              </span>
               <span>👋</span>
             </h2>
           </div>

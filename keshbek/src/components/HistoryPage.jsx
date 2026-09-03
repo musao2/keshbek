@@ -36,7 +36,7 @@ const formatDate = (iso) => {
 
 const HistoryPage = () => {
   const { user, profile } = useAuth();
-  const { transactions, loading } = useTransactions(user?.id);
+  const { transactions, loading, hasMore, loadMore } = useTransactions(user?.id);
   const { station }                = useStationSettings();
   const [activeTab, setActiveTab] = useState('ALL'); // 'ALL' | 'KIRIM' | 'CHIQIM'
 
@@ -160,15 +160,15 @@ const HistoryPage = () => {
         </div>
       </div>
 
-      {/* Yuklanmoqda */}
-      {loading && (
+      {/* Yuklanmoqda (faqat birinchi marta) */}
+      {loading && transactions.length === 0 && (
         <div className="flex justify-center items-center py-16">
           <div className="w-9 h-9 border-3 border-emerald-100 border-t-[#0f7b4c] rounded-full animate-spin" />
         </div>
       )}
 
       {/* Bo'sh holat */}
-      {!loading && filteredList.length === 0 && (
+      {!loading && transactions.length === 0 && (
         <div className="mx-4 bg-white rounded-3xl p-10 text-center border border-gray-100 shadow-sm my-4">
           <div className="w-14 h-14 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-3 text-gray-400">
             <HiWallet size={28} />
@@ -187,8 +187,8 @@ const HistoryPage = () => {
       )}
 
       {/* Operatsiyalar ro'yxati */}
-      {!loading && filteredList.length > 0 && (
-        <div className="flex flex-col gap-2.5 px-4">
+      {filteredList.length > 0 && (
+        <div className="flex flex-col gap-2.5 px-4 pb-6">
           {filteredList.map((item, index) => {
             const isChiqim =
               Number(item.cashback_amount) < 0 ||
@@ -263,6 +263,21 @@ const HistoryPage = () => {
               </div>
             );
           })}
+
+
+          {hasMore && (
+            <button
+              onClick={loadMore}
+              disabled={loading}
+              className="mt-4 w-full py-3.5 bg-gray-200/80 text-gray-700 font-bold rounded-2xl text-[14px] hover:bg-gray-300 transition-colors flex items-center justify-center"
+            >
+              {loading ? (
+                <div className="w-5 h-5 border-2 border-gray-400 border-t-gray-700 rounded-full animate-spin" />
+              ) : (
+                "Ko'proq yuklash"
+              )}
+            </button>
+          )}
         </div>
       )}
     </div>
