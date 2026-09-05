@@ -28,29 +28,38 @@ const PostPaymentReviewModal = ({ isOpen, onClose }) => {
     checkWeeklyLimit();
   }, [isOpen, user]);
 
+  /**
+   * Backend orqali tekshiruv: foydalanuvchi oxirgi 7 kunda sharh qoldirganmi?
+   * Backend /station/reviews/can-review endpointiga murojaat qiladi.
+   * Agar backend 403 qaytarsa yoki canReview===false bo'lsa — bloklanadi.
+   * Fallback: localStorage da oxirgi sharh vaqti saqlangan bo'lsa ham tekshiriladi.
+   */
   const checkWeeklyLimit = async () => {
+    // 1. Backend tekshiruvi
     try {
       const { api } = await import('../lib/api');
-      // Backend API orqali tekshiramiz
       const response = await api.get('/station/reviews/can-review');
       const data = response?.data || response;
-      
-      // Agar backend `false` qaytarsa, demak allaqachon sharh qoldirgan
-      if (data && data.canReview === false) {
+
+      if (data?.canReview === false) {
         setAlreadyReviewedThisWeek(true);
-        setDaysRemaining(data.daysRemaining || 7);
+        setDaysRemaining(data.daysRemaining ?? 7);
         return;
       }
+      // canReview === true bo'lsa fallbackga o'tmasdan ruxsat beramiz
+      setAlreadyReviewedThisWeek(false);
+      return;
     } catch (e) {
-      // console.error('Weekly limit check error:', e);
-      // Backend xato bersa, limitga tushib qolgan bo'lishi mumkin (masalan 403)
-      if (e.message && e.message.includes('403')) {
+      // Backend 403 qaytarsa — bu haftada allaqachon sharh qoldirilgan
+      if (e.message && (e.message.includes('403') || e.message.toLowerCase().includes('once a week') || e.message.toLowerCase().includes('week'))) {
         setAlreadyReviewedThisWeek(true);
+        setDaysRemaining(7);
         return;
       }
+      // Boshqa xatolar (tarmoq, 500 va boshq.) — localStorage fallbackga o'tamiz
     }
 
-    // 2. LocalStorage orqali tezkor tekshiruv (Fallback)
+    // 2. LocalStorage fallback tekshiruvi
     const lastReviewTs = localStorage.getItem(`keshbek_last_review_at_${user?.id}`);
     if (lastReviewTs) {
       const elapsed = Date.now() - parseInt(lastReviewTs, 10);
@@ -81,21 +90,29 @@ const PostPaymentReviewModal = ({ isOpen, onClose }) => {
         comment: comment.trim()
       });
 
-      // Local storage-ga saqlash (fallback/tezkor check uchun)
+      // Muvaffaqiyatli bo'lganda localStorage ga vaqtni yozib qo'yamiz
       if (user?.id) {
         localStorage.setItem(`keshbek_last_review_at_${user.id}`, Date.now().toString());
       }
-    } catch (e) {
-      // console.error('Review yuborishda xatolik:', e);
-    } finally {
+
       setSubmitting(false);
       setSubmitted(true);
-
       setTimeout(() => {
         setSubmitted(false);
         setComment('');
         onClose();
       }, 2500);
+
+    } catch (e) {
+      setSubmitting(false);
+      // 7 kunlik cheklov — backend 403 qaytarsa
+      if (e.message && (e.message.includes('403') || e.message.toLowerCase().includes('week') || e.message.toLowerCase().includes('once'))) {
+        setAlreadyReviewedThisWeek(true);
+        setDaysRemaining(7);
+      } else {
+        // Boshqa xatolar — yopib qo'yamiz
+        onClose();
+      }
     }
   };
 

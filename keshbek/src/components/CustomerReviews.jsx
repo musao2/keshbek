@@ -62,44 +62,47 @@ const DEFAULT_CUSTOMER_REVIEWS = [
 
 const CustomerReviews = () => {
   const [reviews, setReviews] = useState(DEFAULT_CUSTOMER_REVIEWS);
+  const [loading, setLoading] = useState(true);
   const [showAll, setShowAll] = useState(false);
 
   useEffect(() => {
     fetchStationReviews();
   }, []);
 
+  /**
+   * Backend dan sharhlarni oladi.
+   * Muvaffaqiyatli bo'lsa backend ma'lumotlari ko'rsatiladi,
+   * aks holda DEFAULT_CUSTOMER_REVIEWS qoladi (fallback).
+   */
   const fetchStationReviews = async () => {
+    setLoading(true);
     try {
       const { api } = await import('../lib/api');
       const response = await api.get('/station/reviews?page=1&limit=20');
-      
-      let data = response?.data || response;
-      if (data && data.reviews) {
-        data = data.reviews; // if it's paginated inside { reviews: [] }
-      }
+
+      // Turli response strukturalarini qo'llab-quvvatlash:
+      // { data: [...] }, { reviews: [...] }, { data: { reviews: [...] } }, yoki to'g'ridan-to'g'ri []
+      let data = response?.data?.reviews  // { data: { reviews: [...] } }
+             || response?.data            // { data: [...] }
+             || response?.reviews         // { reviews: [...] }
+             || response;                 // to'g'ridan-to'g'ri []
 
       if (Array.isArray(data) && data.length > 0) {
-        // Map backend fields to frontend fields
         const formattedReviews = data.map(r => ({
           id: r.id || r._id || Math.random().toString(),
           user_name: r.user_name || r.userName || r.name || r.customer_name || 'Mijoz',
-          rating: r.rating || 5,
+          rating: Number(r.rating) || 5,
           comment: r.comment || r.text || r.review || '',
           created_at: r.created_at || r.createdAt || new Date().toISOString(),
         }));
         setReviews(formattedReviews);
-        return;
       }
+      // bo'sh array kelsa yoki xato bo'lsa DEFAULT sharhlar ko'rinishda qoladi
     } catch (e) {
       // console.error('Sharhlarni olishda xatolik:', e);
+      // Xato bo'lsa DEFAULT_CUSTOMER_REVIEWS ko'rsatiladi
     } finally {
-      // Fallback if API fails or returns empty
-      try {
-        const local = JSON.parse(localStorage.getItem('keshbek_station_reviews') || '[]');
-        if (local && local.length > 0) {
-          setReviews((prev) => [...local, ...prev.filter((p) => !local.some((l) => l.id === p.id))]);
-        }
-      } catch (e) {}
+      setLoading(false);
     }
   };
 
