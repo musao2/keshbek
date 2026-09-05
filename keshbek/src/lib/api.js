@@ -29,10 +29,16 @@ async function fetchAPI(endpoint, options = {}) {
     ...options.headers,
   });
 
-  let response = await fetch(url, {
-    ...options,
-    headers: getHeaders(token),
-  });
+  let response;
+  try {
+    response = await fetch(url, {
+      ...options,
+      headers: getHeaders(token),
+    });
+  } catch (networkError) {
+    // Tarmoq uzilishi yoki server javob bermasa
+    throw new Error("Internet ishlamayapti, iltimos aloqangizni tekshiring");
+  }
 
   // Token eskirgan bo'lsa va refresh so'rovi bo'lmasa
   if (response.status === 401 && !endpoint.includes('/auth/')) {
@@ -46,7 +52,7 @@ async function fetchAPI(endpoint, options = {}) {
           }
           fetch(url, { ...options, headers: getHeaders(newToken) })
             .then(res => resolve(handleResponse(res)))
-            .catch(err => reject(err));
+            .catch(() => reject(new Error("Internet ishlamayapti, iltimos aloqangizni tekshiring")));
         });
       });
 
@@ -91,27 +97,21 @@ async function fetchAPI(endpoint, options = {}) {
   return handleResponse(response);
 }
 
+
 async function handleResponse(response) {
   if (!response.ok) {
-    let errorData = {};
-    let errMsg = 'API request failed';
+    let errMsg = 'Xatolik yuz berdi, qaytadan urinib ko\'ring';
     try {
-      errorData = await response.json();
-      if (errorData.message) {
-        if (Array.isArray(errorData.message)) {
-          errMsg = errorData.message.join(', ');
-        } else if (typeof errorData.message === 'string') {
-          errMsg = errorData.message;
-        } else {
-          errMsg = JSON.stringify(errorData.message);
-        }
-      } else if (errorData.error) {
-        errMsg = typeof errorData.error === 'string' ? errorData.error : JSON.stringify(errorData.error);
-      } else if (typeof errorData === 'string') {
-        errMsg = errorData;
-      } else {
-        errMsg = JSON.stringify(errorData);
+      const errorData = await response.json();
+      // message maydoni string bo'lsa uni olishadi
+      if (errorData.message && typeof errorData.message === 'string') {
+        errMsg = errorData.message;
+      } else if (Array.isArray(errorData.message)) {
+        errMsg = errorData.message.join(', ');
+      } else if (errorData.error && typeof errorData.error === 'string') {
+        errMsg = errorData.error;
       }
+      // Aks holda foydalanuvchiga qulay standart matn qoladi
     } catch(e) {}
     throw new Error(errMsg);
   }
@@ -123,6 +123,7 @@ async function handleResponse(response) {
 
   return response.json();
 }
+
 
 export const api = {
   get: (endpoint) => fetchAPI(endpoint, { method: 'GET' }),

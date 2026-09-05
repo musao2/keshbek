@@ -42,7 +42,7 @@ const PostPaymentReviewModal = ({ isOpen, onClose }) => {
         return;
       }
     } catch (e) {
-      console.error('Weekly limit check error:', e);
+      // console.error('Weekly limit check error:', e);
       // Backend xato bersa, limitga tushib qolgan bo'lishi mumkin (masalan 403)
       if (e.message && e.message.includes('403')) {
         setAlreadyReviewedThisWeek(true);
@@ -86,7 +86,7 @@ const PostPaymentReviewModal = ({ isOpen, onClose }) => {
         localStorage.setItem(`keshbek_last_review_at_${user.id}`, Date.now().toString());
       }
     } catch (e) {
-      console.error('Review yuborishda xatolik:', e);
+      // console.error('Review yuborishda xatolik:', e);
     } finally {
       setSubmitting(false);
       setSubmitted(true);

@@ -27,7 +27,7 @@ export const useStationSettings = () => {
         setStation({ ...DEFAULT_STATION, ...data });
       }
     } catch (e) {
-      console.error('Station settings xatosi:', e);
+      // console.error('Station settings xatosi:', e);
     } finally {
       setLoading(false);
     }

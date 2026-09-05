@@ -91,16 +91,16 @@ const CustomerReviews = () => {
         return;
       }
     } catch (e) {
-      console.error('Sharhlarni olishda xatolik:', e);
+      // console.error('Sharhlarni olishda xatolik:', e);
+    } finally {
+      // Fallback if API fails or returns empty
+      try {
+        const local = JSON.parse(localStorage.getItem('keshbek_station_reviews') || '[]');
+        if (local && local.length > 0) {
+          setReviews((prev) => [...local, ...prev.filter((p) => !local.some((l) => l.id === p.id))]);
+        }
+      } catch (e) {}
     }
-
-    // Fallback if API fails or returns empty
-    try {
-      const local = JSON.parse(localStorage.getItem('keshbek_station_reviews') || '[]');
-      if (local && local.length > 0) {
-        setReviews((prev) => [...local, ...prev.filter((p) => !local.some((l) => l.id === p.id))]);
-      }
-    } catch (e) {}
   };
 
   // O'rtacha reyting hisoblash

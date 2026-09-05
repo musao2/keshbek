@@ -1,59 +1,15 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from './AuthContext';
+import { api } from '../lib/api';
 
 const NotificationContext = createContext(null);
 
-const READ_NOTIFS_KEY = 'keshbak_read_notification_map';
-const OLD_READ_NOTIFS_KEY = 'keshbak_read_notification_ids';
-const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000; // 3 kun (millisekundda)
-
-const getReadNotificationMap = () => {
-  try {
-    const raw = localStorage.getItem(READ_NOTIFS_KEY);
-    if (!raw) {
-      // Eski array formatdan yangi map formatga o'tkazish (migratsiya)
-      const oldRaw = localStorage.getItem(OLD_READ_NOTIFS_KEY);
-      if (oldRaw) {
-        const oldArr = JSON.parse(oldRaw);
-        const map = {};
-        const now = Date.now();
-        if (Array.isArray(oldArr)) {
-          oldArr.forEach((id) => {
-            map[id] = now;
-          });
-        }
-        localStorage.setItem(READ_NOTIFS_KEY, JSON.stringify(map));
-        return map;
-      }
-      return {};
-    }
-    const map = JSON.parse(raw);
-    if (typeof map === 'object' && map !== null && !Array.isArray(map)) {
-      return map;
-    }
-    return {};
-  } catch (e) {
-    return {};
-  }
-};
-
-const saveReadNotificationMap = (readMap) => {
-  try {
-    localStorage.setItem(READ_NOTIFS_KEY, JSON.stringify(readMap));
-  } catch (e) {}
-};
-
-// Ovoz berish (AudioContext)
 const playNotificationSound = () => {
   try {
     const AudioContext = window.AudioContext || window.webkitAudioContext;
     if (!AudioContext) return;
     const ctx = new AudioContext();
-
-    if (ctx.state === 'suspended') {
-      ctx.resume();
-    }
-
+    if (ctx.state === 'suspended') ctx.resume();
     const now = ctx.currentTime;
     const osc1 = ctx.createOscillator();
     const gain1 = ctx.createGain();
@@ -65,7 +21,6 @@ const playNotificationSound = () => {
     gain1.connect(ctx.destination);
     osc1.start(now);
     osc1.stop(now + 0.25);
-
     const osc2 = ctx.createOscillator();
     const gain2 = ctx.createGain();
     osc2.type = 'sine';
@@ -79,165 +34,110 @@ const playNotificationSound = () => {
   } catch (e) {}
 };
 
-// Tebranish (Vibration)
 const triggerVibration = () => {
   if (typeof navigator !== 'undefined' && navigator.vibrate) {
-    try {
-      navigator.vibrate([200, 100, 200]);
-    } catch (e) {}
+    try { navigator.vibrate([200, 100, 200]); } catch (e) {}
   }
 };
+
+const normalizeNotif = (n) => ({
+  id:         n.id,
+  title:      n.title || 'Bildirishnoma',
+  message:    n.message || n.body || '',
+  amount:     n.amount ? Math.abs(Number(n.amount)) : 0,
+  is_read:    n.isRead !== undefined ? !!n.isRead : !!n.is_read,
+  created_at: n.createdAt || n.created_at || new Date().toISOString(),
+  type:       n.type || 'general',
+});
 
 export const NotificationProvider = ({ children }) => {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [latestToast, setLatestToast] = useState(null);
+  const [unreadCount, setUnreadCount]     = useState(0);
+  const [loading, setLoading]             = useState(false);
+  const [latestToast, setLatestToast]     = useState(null);
+  const prevUnreadRef = useRef(0);
 
-  // Unread count
-  const unreadCount = notifications.filter((n) => !n.is_read).length;
+  const fetchUnreadCount = useCallback(async () => {
+    if (!user) return;
+    try {
+      const res = await api.get('/me/notifications/unread-count');
+      const count = res?.count ?? res?.unreadCount ?? res?.data?.count ?? 0;
+      setUnreadCount(Number(count));
+    } catch (e) {}
+  }, [user]);
 
-  // Supabase 'notifications' va 'transactions' jadvallaridan bildirishnomalarni yuklash
-  const fetchNotifications = useCallback(async () => {
-    if (!user?.id) {
-      setNotifications([]);
-      return;
-    }
-
+  const fetchNotifications = useCallback(async (page = 1, limit = 20) => {
+    if (!user) { setNotifications([]); return; }
     setLoading(true);
     try {
-      // API orqali bildirishnomalarni olish
-      // const notifData = await api.get('/notifications');
-      // const txData = await api.get('/me/transactions');
-      
-      const notifData = [];
-      const txData = [];
-      
-      const readMap = getReadNotificationMap();
-      const now = Date.now();
-      const updatedReadMap = { ...readMap };
-      let mapChanged = false;
-
-      const items = [];
-
-      // Process notifications table items
-      (notifData || []).forEach((n) => {
-        const readTimestamp = readMap[n.id];
-        const isRead = !!readTimestamp || !!n.is_read;
-
-        if (isRead && readTimestamp) {
-          if (now - readTimestamp > THREE_DAYS_MS) return;
-        }
-
-        items.push({
-          id: n.id,
-          user_id: n.user_id,
-          title: n.title || "Yangi Xabarnoma 🔔",
-          message: n.message || "",
-          category: n.category || "AKSIYA",
-          amount: 0,
-          is_read: isRead,
-          read_at: readTimestamp || null,
-          created_at: n.created_at
-        });
-      });
-
-      // Process valid transactions (> 0 amount)
-      (txData || []).forEach((tx) => {
-        const amtVal = Math.abs(Number(tx.cashback_amount || tx.amount || 0));
-        if (amtVal === 0) return; // Ignore 0 amount fake SMS records if any exist in transactions
-
-        const isKirim = Number(tx.cashback_amount ?? tx.amount ?? 0) >= 0;
-        let msgText = tx.qr_data || tx.comment || tx.description || '';
-        if (msgText.startsWith('{"') || msgText.startsWith('http') || !msgText) {
-          msgText = isKirim ? "Hisobingizga keshbek o'tkazildi" : "Keshbek ishlatildi";
-        }
-
-        const txNotifId = `tx_${tx.id}`;
-        const readTimestamp = readMap[txNotifId];
-        const isRead = !!readTimestamp;
-
-        if (isRead && readTimestamp) {
-          if (now - readTimestamp > THREE_DAYS_MS) return;
-        }
-
-        items.push({
-          id: txNotifId,
-          user_id: tx.user_id,
-          title: isKirim ? "Kartangizga pul tushdi! 💳" : "Keshbek yechib olindi 💳",
-          message: msgText,
-          amount: amtVal,
-          is_read: isRead,
-          read_at: readTimestamp || null,
-          created_at: tx.created_at
-        });
-      });
-
-      // Sort combined list descending by created_at
+      const res = await api.get('/me/notifications?page=' + page + '&limit=' + limit);
+      const rawList =
+        Array.isArray(res)                ? res :
+        Array.isArray(res?.data)          ? res.data :
+        Array.isArray(res?.items)         ? res.items :
+        Array.isArray(res?.notifications) ? res.notifications :
+        [];
+      const items = rawList.map(normalizeNotif);
       items.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-
-      // Eskirgan local storage keylarini tozalash
-      Object.keys(updatedReadMap).forEach((id) => {
-        if (now - updatedReadMap[id] > THREE_DAYS_MS) {
-          delete updatedReadMap[id];
-          mapChanged = true;
-        }
-      });
-
-      if (mapChanged) {
-        saveReadNotificationMap(updatedReadMap);
-      }
-
       setNotifications(items);
+      const newUnread = items.filter(n => !n.is_read).length;
+      if (prevUnreadRef.current >= 0 && newUnread > prevUnreadRef.current) {
+        const newest = items.find(n => !n.is_read);
+        if (newest) {
+          setLatestToast(newest);
+          playNotificationSound();
+          triggerVibration();
+          setTimeout(() => setLatestToast(null), 5000);
+        }
+      }
+      prevUnreadRef.current = newUnread;
+      setUnreadCount(newUnread);
     } catch (err) {
-      console.error('Error fetching notifications:', err);
     } finally {
       setLoading(false);
     }
-  }, [user?.id]);
+  }, [user]);
 
-  // Bitta bildirishnomani o'qilgan deb belgilash
   const markAsRead = async (notificationId) => {
     if (!notificationId) return;
-
-    const now = Date.now();
-
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === notificationId ? { ...n, is_read: true, read_at: now } : n))
+    setNotifications(prev =>
+      prev.map(n => n.id === notificationId ? { ...n, is_read: true } : n)
     );
-
-    const readMap = getReadNotificationMap();
-    readMap[notificationId] = now;
-    saveReadNotificationMap(readMap);
+    setUnreadCount(prev => Math.max(0, prev - 1));
+    try {
+      await api.post('/me/notifications/' + notificationId + '/read', {});
+    } catch (e) {}
   };
 
-  // Barcha bildirishnomalarni o'qilgan deb belgilash
   const markAllAsRead = async () => {
-    if (!user?.id || unreadCount === 0) return;
-
-    const now = Date.now();
-    const readMap = getReadNotificationMap();
-
-    notifications.forEach((n) => {
-      if (!n.is_read) {
-        readMap[n.id] = now;
-      }
-    });
-
-    saveReadNotificationMap(readMap);
-
-    setNotifications((prev) =>
-      prev.map((n) => ({ ...n, is_read: true, read_at: n.read_at || now }))
-    );
+    if (!user || unreadCount === 0) return;
+    setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+    setUnreadCount(0);
+    try {
+      await api.post('/me/notifications/read-all', {});
+    } catch (e) {}
   };
 
-  // Supabase o'chirildi, shuning uchun real-time obunalar hozircha o'chirildi.
-  // Kelajakda WebSocket (Socket.io) orqali ulash mumkin.
   useEffect(() => {
-    if (user?.id) {
+    if (user) {
+      prevUnreadRef.current = -1;
       fetchNotifications();
+      fetchUnreadCount();
+    } else {
+      setNotifications([]);
+      setUnreadCount(0);
+      prevUnreadRef.current = 0;
     }
-  }, [user?.id, fetchNotifications]);
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    const interval = setInterval(() => {
+      fetchUnreadCount();
+    }, 60000);
+    return () => clearInterval(interval);
+  }, [user, fetchUnreadCount]);
 
   return (
     <NotificationContext.Provider
@@ -246,6 +146,7 @@ export const NotificationProvider = ({ children }) => {
         unreadCount,
         loading,
         fetchNotifications,
+        fetchUnreadCount,
         markAsRead,
         markAllAsRead,
         latestToast,

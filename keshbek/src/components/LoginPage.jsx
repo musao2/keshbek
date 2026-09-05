@@ -144,36 +144,37 @@ const LoginPage = () => {
         )}
 
         {/* 1-QADAM: TELEFON VA ISMI */}
-        {step === 1 && (
-          <form onSubmit={handleSendCode} className="flex flex-col gap-4">
+        {step === 1 && mode === 'register' && (
+          <div className="flex flex-col items-center justify-center gap-5 py-4">
+            <div className="text-center">
+              <h3 className="text-gray-800 text-[16px] font-bold mb-2">Telegram orqali ro'yxatdan o'ting</h3>
+              <p className="text-gray-500 text-[13px] leading-relaxed">
+                Tizimdan to'liq foydalanish va keshbeklarni yig'ish uchun bizning Telegram botimiz orqali ro'yxatdan o'tishingiz kerak.
+              </p>
+            </div>
             
-            {mode === 'register' && (
-              <>
-                <div className="relative">
-                  <IoPersonOutline size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Ismingiz"
-                    value={firstName}
-                    onChange={e => setFirstName(e.target.value)}
-                    required
-                    className="w-full h-12 pl-10 pr-4 bg-gray-50 border border-gray-200 rounded-xl text-[14px] font-semibold text-gray-800 outline-none focus:border-[#0f7b4c] transition-colors"
-                  />
-                </div>
-                <div className="relative">
-                  <IoPersonOutline size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Familiyangiz"
-                    value={lastName}
-                    onChange={e => setLastName(e.target.value)}
-                    required
-                    className="w-full h-12 pl-10 pr-4 bg-gray-50 border border-gray-200 rounded-xl text-[14px] font-semibold text-gray-800 outline-none focus:border-[#0f7b4c] transition-colors"
-                  />
-                </div>
-              </>
-            )}
+            <a
+              href="https://t.me/keshbakbot"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full h-12 bg-[#2AABEE] hover:bg-[#229ED9] rounded-xl text-white font-bold text-[15px] flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-[#2AABEE]/20"
+            >
+              <IoSendOutline size={18} />
+              @keshbakbot ga o'tish
+            </a>
 
+            <button
+              type="button"
+              onClick={() => setMode('login')}
+              className="text-[#0f7b4c] text-[13px] font-bold hover:underline text-center mt-1"
+            >
+              Ro'yxatdan o'tganmisiz? Kirish ➔
+            </button>
+          </div>
+        )}
+
+        {step === 1 && mode === 'login' && (
+          <form onSubmit={handleSendCode} className="flex flex-col gap-4">
             <div className="relative">
               <IoPhonePortraitOutline size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
@@ -192,7 +193,7 @@ const LoginPage = () => {
                 <span>{error}</span>
                 {error.toLowerCase().includes('telegram') && (
                   <a
-                    href="https://t.me/Keshbakbot"
+                    href="https://t.me/keshbakbot"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center justify-center bg-[#2AABEE] text-white px-3 py-2 rounded-lg font-bold text-[13px] shadow-sm hover:bg-[#229ED9] transition-colors mt-1"
@@ -218,23 +219,13 @@ const LoginPage = () => {
               )}
             </button>
 
-            {mode === 'login' ? (
-              <button
-                type="button"
-                onClick={() => setMode('register')}
-                className="text-[#0f7b4c] text-[12px] font-bold hover:underline text-center mt-1"
-              >
-                Hali ro'yxatdan o'tmaganmisiz? Ro'yxatdan o'tish ➔
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setMode('login')}
-                className="text-[#0f7b4c] text-[12px] font-bold hover:underline text-center mt-1"
-              >
-                Ro'yxatdan o'tganmisiz? Kirish ➔
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => setMode('register')}
+              className="text-[#0f7b4c] text-[12px] font-bold hover:underline text-center mt-1"
+            >
+              Hali ro'yxatdan o'tmaganmisiz? Ro'yxatdan o'tish ➔
+            </button>
           </form>
         )}
 

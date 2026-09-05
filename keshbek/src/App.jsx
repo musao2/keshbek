@@ -26,7 +26,7 @@ const AppContent = () => {
 
   const handleSaveMandatoryName = async (e) => {
     e.preventDefault();
-    console.log("[App] handleSaveMandatoryName bosildi", { mandatoryFirstName, mandatoryLastName });
+    // console.log("[App] handleSaveMandatoryName bosildi", { mandatoryFirstName, mandatoryLastName });
     
     if (!mandatoryFirstName.trim() || !mandatoryLastName.trim()) {
       setNameError('Iltimos, ism va familiyangizni to\'liq kiriting!');
@@ -42,10 +42,10 @@ const AppContent = () => {
     setSavingName(false);
     
     if (res?.error) {
-      console.log("[App] Xatolik bor:", res.error);
+      // console.log("[App] Xatolik bor:", res.error);
       setNameError(res.error);
     } else {
-      console.log("[App] Xatolik yo'q, ism yangilandi!");
+      // console.log("[App] Xatolik yo'q, ism yangilandi!");
       setNameError('');
       // Vaqtincha manual yopib qo'yish (re-render orqali o'zi yopilishi kerak)
       if (profile) {

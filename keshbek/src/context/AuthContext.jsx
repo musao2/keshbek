@@ -4,8 +4,14 @@ import { api } from '../lib/api';
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [profile, setProfile] = useState(null);
+  const [user, setUser] = useState(() => {
+    const cachedUser = localStorage.getItem('user');
+    return cachedUser ? JSON.parse(cachedUser) : null;
+  });
+  const [profile, setProfile] = useState(() => {
+    const cachedProfile = localStorage.getItem('profile');
+    return cachedProfile ? JSON.parse(cachedProfile) : null;
+  });
   const [loading, setLoading] = useState(true);
 
   // Dastlabki yuklanishda tokenni tekshirish va profilni yuklash
@@ -13,18 +19,24 @@ export const AuthProvider = ({ children }) => {
     const initializeAuth = async () => {
       const token = localStorage.getItem('accessToken');
       if (token) {
-        // Hozircha profilni yuklash logikasi (backenddan)
-        // Agar /users/me kabi endpoint bo'lsa, shu yerda chaqiriladi
-        // Hozircha faqat tokenni borligiga qarab user ni set qilamiz
+        // Agar keshda user ma'lumotlari bo'lsa, yuklanishni darhol to'xtatamiz
+        if (localStorage.getItem('user')) {
+          setLoading(false);
+        }
+        
         try {
           const data = await api.get('/me'); 
           const userData = data?.data || data;
           setProfile(userData);
           setUser(userData);
+          localStorage.setItem('user', JSON.stringify(userData));
+          localStorage.setItem('profile', JSON.stringify(userData));
         } catch (error) {
-          console.error("Token yaroqsiz", error);
+          // console.error("Token yaroqsiz", error);
           localStorage.removeItem('accessToken');
           localStorage.removeItem('refreshToken');
+          localStorage.removeItem('user');
+          localStorage.removeItem('profile');
           setUser(null);
           setProfile(null);
         }
@@ -88,13 +100,19 @@ export const AuthProvider = ({ children }) => {
         const userData = response.user || (response.data && response.data.user) || { id: 'dummy_user', phone: cleanPhone };
         setUser(userData);
         setProfile(userData);
+        localStorage.setItem('user', JSON.stringify(userData));
+        localStorage.setItem('profile', JSON.stringify(userData));
+
+        // Yangi foydalanuvchimi yoki yo'qmi tekshiramiz:
+        // Ism bo'sh yoki "User" bo'lsa yangi foydalanuvchi deb hisoblaymiz
+        const userName = userData.firstName || userData.name || userData.fullName || '';
+        const isNewUser = !userName || userName === 'User' || userName.trim() === '';
 
         // Tokendan keyin to'liq profilni ham bitta chaqirib qo'yishimiz mumkin:
         refreshProfile();
         
-        return { success: true };
+        return { success: true, isNewUser };
       } else {
-        console.error("Login response to'liq ko'rinishi:", response);
         return { error: 'Token olinmadi. Iltimos qaytadan urinib koring. Konsolni tekshiring (F12).' };
       }
 
@@ -103,8 +121,9 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+
   const updateProfileName = async (nameData) => {
-    console.log("[AuthContext] updateProfileName ishga tushdi:", nameData);
+    // console.log("[AuthContext] updateProfileName ishga tushdi:", nameData);
     try {
       let fName = '';
       let lName = '';
@@ -121,7 +140,7 @@ export const AuthProvider = ({ children }) => {
         fullName = `${fName} ${lName}`.trim();
       }
 
-      console.log("[AuthContext] PATCH /me yuborilmoqda:", { firstName: fName, lastName: lName, name: fullName });
+      // console.log("[AuthContext] PATCH /me yuborilmoqda:", { firstName: fName, lastName: lName, name: fullName });
       
       const response = await api.patch('/me', {
         firstName: fName,
@@ -129,19 +148,27 @@ export const AuthProvider = ({ children }) => {
         name: fullName
       });
       
-      console.log("[AuthContext] PATCH /me javobi:", response);
+      // console.log("[AuthContext] PATCH /me javobi:", response);
 
       // React stateni darhol yangilaymiz ki modal yopilsin
-      setProfile(prev => prev ? { ...prev, name: fullName, firstName: fName, lastName: lName } : null);
-      setUser(prev => prev ? { ...prev, name: fullName, firstName: fName, lastName: lName } : null);
+      setProfile(prev => {
+        const updated = prev ? { ...prev, name: fullName, firstName: fName, lastName: lName } : null;
+        if(updated) localStorage.setItem('profile', JSON.stringify(updated));
+        return updated;
+      });
+      setUser(prev => {
+        const updated = prev ? { ...prev, name: fullName, firstName: fName, lastName: lName } : null;
+        if(updated) localStorage.setItem('user', JSON.stringify(updated));
+        return updated;
+      });
 
-      console.log("[AuthContext] refreshProfile() chaqirilmoqda...");
+      // console.log("[AuthContext] refreshProfile() chaqirilmoqda...");
       await refreshProfile();
-      console.log("[AuthContext] Profil yangilandi!");
+      // console.log("[AuthContext] Profil yangilandi!");
       
       return { success: true };
     } catch (error) {
-      console.error("[AuthContext] XATOLIK ushlandi:", error);
+      // console.error("[AuthContext] XATOLIK ushlandi:", error);
       return { error: error.message || 'Profilni yangilashda xatolik yuz berdi' };
     }
   };
@@ -150,10 +177,12 @@ export const AuthProvider = ({ children }) => {
     try {
       await api.post('/auth/logout', {});
     } catch (e) {
-      console.error(e);
+      // console.error(e);
     }
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
+    localStorage.removeItem('user');
+    localStorage.removeItem('profile');
     setUser(null);
     setProfile(null);
   };
@@ -166,9 +195,11 @@ export const AuthProvider = ({ children }) => {
         const userData = data?.data || data;
         setProfile(userData);
         setUser(userData);
+        localStorage.setItem('user', JSON.stringify(userData));
+        localStorage.setItem('profile', JSON.stringify(userData));
       }
     } catch (e) {
-      console.error("Profilni yangilashda xatolik", e);
+      // console.error("Profilni yangilashda xatolik", e);
     }
   };
 
