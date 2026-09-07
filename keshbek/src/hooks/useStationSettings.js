@@ -2,21 +2,26 @@ import { useState, useEffect } from 'react';
 import { api } from '../lib/api';
 
 const DEFAULT_STATION = {
-  name: 'Lukoil — Yunusobod',
-  address: 'Yunusobod tumani, 14-mavze, 7-uy',
-  phone: '+998 71 234 56 78',
-  work_hours: 'Har kuni: 07:00 – 23:00',
-  cashback_percent: 5.0,
-  rating: 4.8,
-  fuel_types: ['AI-80', 'AI-91', 'AI-95', 'Dizel'],
+  name: 'Zapravka Stansiyasi',
+  address: '',
+  phone: '',
+  work_hours: '',
+  workHours: '',
+  cashback_percent: 9,
+  cashbackPercent: 9,
+  rating: 5,
+  fuel_types: ['AI-80', 'AI-91', 'AI-95'],
+  fuelTypes: ['AI-80', 'AI-91', 'AI-95'],
   is_open: true,
-  lat: 41.3653226,
+  isOpen: true,
+  lat: 41.3253226,
   lng: 69.2870051,
 };
 
 /**
  * Backend dan stansiya sozlamalarini oladi.
- * API javob formatlari: { data: {...} }, { station: {...} }, yoki to'g'ridan-to'g'ri obyekt
+ * API camelCase qaytaradi: isOpen, cashbackPercent, fuelTypes, workHours
+ * Ikkala formatni ham eksport qiladi (snake_case va camelCase)
  */
 export const useStationSettings = () => {
   const [station, setStation] = useState(DEFAULT_STATION);
@@ -27,22 +32,48 @@ export const useStationSettings = () => {
     try {
       const response = await api.get('/station');
 
-      // Turli response strukturalarini qo'llab-quvvatlash
-      let data = response?.data?.station   // { data: { station: {...} } }
-             || response?.data             // { data: {...} }
-             || response?.station          // { station: {...} }
-             || response;                  // to'g'ridan-to'g'ri obyekt
+      // API { success: true, data: {...} } ko'rinishida qaytaradi
+      let raw = response?.data?.station
+             || response?.data
+             || response?.station
+             || response;
 
-      if (data && typeof data === 'object' && !Array.isArray(data)) {
-        // fuel_types string bo'lib kelsa arrayga o'tkazamiz
-        if (typeof data.fuel_types === 'string') {
-          data = { ...data, fuel_types: data.fuel_types.split(',').map(s => s.trim()) };
-        }
-        setStation(prev => ({ ...DEFAULT_STATION, ...prev, ...data }));
+      if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+        // fuel_types yoki fuelTypes — ikkalasini ham qo'llab-quvvatlaymiz
+        const fuelArr = raw.fuelTypes || raw.fuel_types || [];
+        const fuelTypes = Array.isArray(fuelArr)
+          ? fuelArr
+          : typeof fuelArr === 'string'
+            ? fuelArr.split(',').map(s => s.trim())
+            : DEFAULT_STATION.fuelTypes;
+
+        // isOpen yoki is_open
+        const isOpen = raw.isOpen ?? raw.is_open ?? DEFAULT_STATION.isOpen;
+
+        // cashbackPercent yoki cashback_percent
+        const cashbackPercent = raw.cashbackPercent ?? raw.cashback_percent ?? DEFAULT_STATION.cashbackPercent;
+
+        // workHours yoki work_hours
+        const workHours = raw.workHours || raw.work_hours || DEFAULT_STATION.work_hours;
+
+        const normalized = {
+          ...DEFAULT_STATION,
+          ...raw,
+          // Normalize — ikkalasini ham set qilamiz
+          fuelTypes,
+          fuel_types: fuelTypes,
+          isOpen,
+          is_open: isOpen,
+          cashbackPercent,
+          cashback_percent: cashbackPercent,
+          workHours,
+          work_hours: workHours,
+        };
+
+        setStation(normalized);
       }
     } catch (e) {
       // Tarmoq xatosi bo'lsa default qiymatlar qoladi
-      // console.error('Station settings xatosi:', e);
     } finally {
       setLoading(false);
     }

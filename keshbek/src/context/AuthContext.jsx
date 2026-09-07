@@ -27,6 +27,8 @@ export const AuthProvider = ({ children }) => {
         try {
           const data = await api.get('/me'); 
           const userData = data?.data || data;
+          // DEBUG: /me API javobi — karta raqami bormi tekshirish uchun
+          console.log('[/me API javob]', JSON.stringify(userData, null, 2));
           setProfile(userData);
           setUser(userData);
           localStorage.setItem('user', JSON.stringify(userData));

@@ -16,13 +16,15 @@ import {
   HiReceiptPercent,
   HiLockClosed,
   HiPaperAirplane,
-  HiPencilSquare
+  HiPencilSquare,
+  HiCreditCard
 } from 'react-icons/hi2';
 import { RiGasStationFill } from 'react-icons/ri';
 import { FaCrown, FaTrophy, FaMedal, FaShieldHalved } from 'react-icons/fa6';
 import { useAuth } from '../context/AuthContext';
 import { useTransactions } from '../hooks/useTransactions';
 import { useStationSettings } from '../hooks/useStationSettings';
+import { useSummary } from '../hooks/useSummary';
 
 const formatSum = (n) => Number(n || 0).toLocaleString('uz-UZ') + " so'm";
 
@@ -30,7 +32,26 @@ const ProfilePage = () => {
   const { profile, signOut, user, updateProfileName } = useAuth();
   const { transactions } = useTransactions(user?.id);
   const { station } = useStationSettings();
+  const { summary } = useSummary(user?.id);
   const [copied, setCopied] = useState(false);
+
+  // Karta raqami: summary → profile ikki joydan olinadi
+  const rawCardNumber =
+    summary?.cardNumber ??
+    profile?.card_number ??
+    profile?.cardNumber ??
+    null;
+
+  // Karta raqamini chiroyli ko'rsatish: 4 ta bo'lib ajratamiz
+  const formatCardNumber = (num) => {
+    if (!num) return '—';
+    const s = String(num).replace(/\s/g, '');
+    // Har 4 ta belgidan keyin bo'sh joy
+    return s.replace(/.{4}(?=.)/g, '$& ');
+  };
+
+  // Balans: summary API dan → profile fallback
+  const displayBalance = summary?.balance ?? profile?.cashback_balance ?? 0;
 
   // Ismni va familiyani tahrirlash state'lari
   const [showEditName, setShowEditName] = useState(false);
@@ -99,7 +120,8 @@ const ProfilePage = () => {
     .reduce((s, t) => s + Number(t.cashback_amount || 0), 0);
 
   const copyCard = () => {
-    navigator.clipboard.writeText(profile?.card_number ?? '').catch(() => { });
+    if (!rawCardNumber) return;
+    navigator.clipboard.writeText(rawCardNumber).catch(() => {});
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -235,14 +257,13 @@ const ProfilePage = () => {
           </div>
         </div>
       </div>
-
-      {/* Balans va karta */}
+            {/* Balans va karta */}
       <div className="mx-4 -mt-6 bg-white rounded-2xl shadow-md p-5 relative z-10 border border-gray-100">
         <div className="flex justify-between items-center mb-4">
           <div>
             <p className="text-gray-400 text-[12px] font-medium">Keshbek balansi</p>
             <h3 className="text-[28px] font-black text-[#1a1a1a] leading-none mt-1">
-              {formatSum(profile?.cashback_balance)}
+              {formatSum(displayBalance)}
             </h3>
           </div>
           <div className="w-12 h-12 bg-[#e8f5e9] rounded-xl flex items-center justify-center shrink-0 border border-emerald-100 text-[#0f7b4c]">
@@ -250,21 +271,33 @@ const ProfilePage = () => {
           </div>
         </div>
 
+        {/* Karta raqami bloki */}
         <div className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-3 border border-gray-100">
-          <div>
-            <p className="text-gray-400 text-[11px] font-medium">Karta raqami</p>
-            <p className="font-bold text-[15px] text-[#1a1a1a] font-mono">{profile?.card_number ?? '—'}</p>
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 bg-[#0f7b4c]/10 rounded-lg flex items-center justify-center text-[#0f7b4c] shrink-0">
+              <HiCreditCard size={17} />
+            </div>
+            <div>
+              <p className="text-gray-400 text-[11px] font-medium">Karta raqami</p>
+              <p className="font-bold text-[15px] text-[#1a1a1a] font-mono tracking-wider">
+                {formatCardNumber(rawCardNumber)}
+              </p>
+            </div>
           </div>
-          <button
-            onClick={copyCard}
-            className={`flex items-center gap-1.5 text-[13px] font-semibold transition-colors ${copied ? 'text-[#0f7b4c]' : 'text-gray-500 hover:text-gray-700'
+          {rawCardNumber && (
+            <button
+              onClick={copyCard}
+              className={`flex items-center gap-1.5 text-[13px] font-semibold transition-colors shrink-0 ${
+                copied ? 'text-[#0f7b4c]' : 'text-gray-500 hover:text-gray-700'
               }`}
-          >
-            <HiSquare2Stack size={17} />
-            {copied ? 'Nusxalandi!' : 'Nusxa'}
-          </button>
+            >
+              <HiSquare2Stack size={17} />
+              {copied ? 'Nusxalandi!' : 'Nusxa'}
+            </button>
+          )}
         </div>
       </div>
+
 
       {/* Statistika kartalari */}
       <div className="grid grid-cols-3 gap-2.5 mx-4 mt-4 mb-5">

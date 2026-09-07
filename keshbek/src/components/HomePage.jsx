@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { HiSparkles, HiQrCode, HiGift } from 'react-icons/hi2';
+import { HiSparkles, HiQrCode, HiMiniArrowDownLeft, HiMiniArrowUpRight } from 'react-icons/hi2';
 import { RiGasStationFill } from 'react-icons/ri';
 import { useAuth } from '../context/AuthContext';
 import { useTransactions } from '../hooks/useTransactions';
 import { useStationSettings } from '../hooks/useStationSettings';
+import { useSummary } from '../hooks/useSummary';
 import QRScanner from './QRScanner';
 
 // So'm formatini chiroyli ko'rsatish
@@ -25,8 +26,16 @@ const HomePage = () => {
   const { user, profile, refreshProfile } = useAuth();
   const { transactions, addTransaction } = useTransactions(user?.id);
   const { station } = useStationSettings();
+  const { summary, refetch: refetchSummary } = useSummary(user?.id);
   const [showScanner, setShowScanner] = useState(false);
   const [scanMsg, setScanMsg] = useState('');
+
+  // Summary dan olingan yoki profile fallback
+  const displayBalance       = summary?.balance         ?? profile?.cashback_balance ?? 0;
+  const displayCashbackPct   = summary?.cashbackPercent ?? station.cashback_percent  ?? 0;
+  const displayTotalEarned   = summary?.totalEarned     ?? 0;
+  const displayTotalSpent    = summary?.totalSpent      ?? 0;
+  const displayTotalPurchase = summary?.totalPurchase   ?? 0;
 
   // Faqat haqiqiy pul tushgan yoki yechilgan tranzaksiyalar (0 so'mlik oddiy xabarlar o'tmaydi)
   const validTransactions = transactions.filter(
@@ -61,6 +70,7 @@ const HomePage = () => {
         setScanMsg(`✅ Keshbek yig'ildi! ${amountMsg ? '+' + formatSum(Math.abs(amountMsg)) : ''}`);
       }
       await refreshProfile();
+      await refetchSummary();
     }
 
     setTimeout(() => setScanMsg(''), 3500);
@@ -104,15 +114,34 @@ const HomePage = () => {
           {/* Balance info */}
           <div className="relative z-10">
             <p className="text-emerald-100/75 text-[12px] font-medium mb-1">Keshbek balansi</p>
-            <h3 className="text-[34px] font-black leading-none mb-4 tracking-tight">
-              {formatSum(profile?.cashback_balance)}
+            <h3 className="text-[34px] font-black leading-none mb-2 tracking-tight">
+              {formatSum(displayBalance)}
             </h3>
+
+            {/* Kirim / Chiqim mini statistika */}
+            {(displayTotalEarned > 0 || displayTotalSpent > 0 || displayTotalPurchase > 0) && (
+              <div className="flex items-center gap-2 mb-3">
+                <div className="flex items-center gap-1 bg-white/10 backdrop-blur-md px-2.5 py-1 rounded-full text-[11px] font-semibold text-emerald-100 border border-white/10">
+                  <HiMiniArrowDownLeft size={13} className="text-emerald-300" />
+                  +{formatSum(displayTotalEarned)}
+                </div>
+                <div className="flex items-center gap-1 bg-white/10 backdrop-blur-md px-2.5 py-1 rounded-full text-[11px] font-semibold text-rose-100 border border-white/10">
+                  <HiMiniArrowUpRight size={13} className="text-rose-300" />
+                  -{formatSum(displayTotalSpent)}
+                </div>
+                {displayTotalPurchase > 0 && (
+                  <div className="flex items-center gap-1 bg-white/10 backdrop-blur-md px-2.5 py-1 rounded-full text-[11px] font-semibold text-white/70 border border-white/10">
+                    🛒 {formatSum(displayTotalPurchase)}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Bottom badge and station */}
             <div className="flex items-center justify-between pt-1">
               <div className="flex items-center gap-1.5 bg-white/15 backdrop-blur-md px-3 py-1.5 rounded-full text-[12px] font-bold text-emerald-50 border border-white/15">
                 <HiSparkles size={14} className="text-amber-300" />
-                <span>{station.cashback_percent}% keshbek</span>
+                <span>{displayCashbackPct}% keshbek</span>
               </div>
               <div className="flex items-center gap-1.5 text-[#e8f5e9] text-[12px] font-medium">
                 <RiGasStationFill size={15} />
@@ -140,9 +169,9 @@ const HomePage = () => {
             <RiGasStationFill size={22} />
           </div>
           <div>
-            <p className="text-[#965b20] font-bold text-[13px]">Keshbek {station.cashback_percent}%</p>
+            <p className="text-[#965b20] font-bold text-[13px]">Keshbek {displayCashbackPct}%</p>
             <p className="text-[#1a1a1a] font-bold text-[14px] leading-snug">
-              Har to'lovdan {station.cashback_percent}% keshbek yig'asiz
+              Har to'lovdan {displayCashbackPct}% keshbek yig'asiz
             </p>
           </div>
         </div>

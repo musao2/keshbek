@@ -4,12 +4,14 @@ import {
   HiMiniArrowUpRight, 
   HiWallet, 
   HiClock, 
-  HiTag 
+  HiTag,
+  HiShoppingCart
 } from 'react-icons/hi2';
 import { RiGasStationFill } from 'react-icons/ri';
 import { useAuth } from '../context/AuthContext';
 import { useTransactions } from '../hooks/useTransactions';
 import { useStationSettings } from '../hooks/useStationSettings';
+import { useSummary } from '../hooks/useSummary';
 
 const formatSum = (n) => Number(Math.abs(n) || 0).toLocaleString('uz-UZ') + " so'm";
 
@@ -38,6 +40,7 @@ const HistoryPage = () => {
   const { user, profile } = useAuth();
   const { transactions, loading, hasMore, loadMore } = useTransactions(user?.id);
   const { station }                = useStationSettings();
+  const { summary }               = useSummary(user?.id);
   const [activeTab, setActiveTab] = useState('ALL'); // 'ALL' | 'KIRIM' | 'CHIQIM'
 
   // Faqat haqiqiy pul tushgan yoki yechilgan tranzaksiyalar (0 so'mlik oddiy xabarlar o'tmaydi)
@@ -54,9 +57,14 @@ const HistoryPage = () => {
     (t) => Number(t.cashback_amount) < 0 || (t.type || '').toLowerCase() === 'withdraw' || (t.type || '').toUpperCase() === 'WITHDRAW'
   );
 
-  const totalKirim = kirimTransactions.reduce((s, t) => s + Number(t.cashback_amount || 0), 0);
-  const totalChiqim = chiqimTransactions.reduce((s, t) => s + Math.abs(Number(t.cashback_amount || 0)), 0);
-  const currentCashbackBalance = profile?.cashback_balance ?? Math.max(0, totalKirim - totalChiqim);
+  // Summary API dan aniqlangan qiymatlar (fallback: tranzaksiyalardan hisoblash)
+  const localKirim  = kirimTransactions.reduce((s, t)  => s + Number(t.cashback_amount || 0), 0);
+  const localChiqim = chiqimTransactions.reduce((s, t) => s + Math.abs(Number(t.cashback_amount || 0)), 0);
+
+  const displayBalance       = summary?.balance         ?? profile?.cashback_balance ?? Math.max(0, localKirim - localChiqim);
+  const displayTotalEarned   = summary?.totalEarned     ?? localKirim;
+  const displayTotalSpent    = summary?.totalSpent      ?? localChiqim;
+  const displayTotalPurchase = summary?.totalPurchase   ?? 0;
 
   // Saralanayotgan ro'yxat
   const filteredList = validTransactions.filter((t) => {
@@ -86,7 +94,7 @@ const HistoryPage = () => {
           </div>
 
           <h2 className="text-3xl font-black leading-none my-3 tracking-tight">
-            {formatSum(currentCashbackBalance)}
+            {formatSum(displayBalance)}
           </h2>
 
           {/* Kirim va Chiqim statistikasi */}
@@ -96,7 +104,7 @@ const HistoryPage = () => {
                 <HiMiniArrowDownLeft className="text-emerald-300 font-bold" size={16} />
                 Jami Kirim
               </div>
-              <p className="font-extrabold text-base text-white">+ {formatSum(totalKirim)}</p>
+              <p className="font-extrabold text-base text-white">+ {formatSum(displayTotalEarned)}</p>
             </div>
 
             <div className="bg-white/10 backdrop-blur-md rounded-2xl p-3 border border-white/10">
@@ -104,8 +112,18 @@ const HistoryPage = () => {
                 <HiMiniArrowUpRight className="text-rose-300 font-bold" size={16} />
                 Jami Chiqim
               </div>
-              <p className="font-extrabold text-base text-white">- {formatSum(totalChiqim)}</p>
+              <p className="font-extrabold text-base text-white">- {formatSum(displayTotalSpent)}</p>
             </div>
+
+            {displayTotalPurchase > 0 && (
+              <div className="bg-white/10 backdrop-blur-md rounded-2xl p-3 border border-white/10 col-span-2">
+                <div className="flex items-center gap-1.5 text-amber-200 text-xs font-medium mb-1">
+                  <HiShoppingCart className="text-amber-300 font-bold" size={15} />
+                  Umumiy Xarajat (To'lovlar)
+                </div>
+                <p className="font-extrabold text-base text-white">{formatSum(displayTotalPurchase)}</p>
+              </div>
+            )}
           </div>
         </div>
       </div>
