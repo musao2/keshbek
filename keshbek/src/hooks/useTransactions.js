@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { api } from '../lib/api';
 
 // Tranzaksiyalarni API dan olish
-export const useTransactions = (userId) => {
+export const useTransactions = () => {
   const [transactions, setTransactions] = useState([]);
   const [loading,      setLoading]      = useState(true);
   const [error,        setError]        = useState(null);
@@ -10,7 +10,7 @@ export const useTransactions = (userId) => {
   const [hasMore,      setHasMore]      = useState(true);
 
   const fetchTransactions = async (pageToFetch = 1, append = false) => {
-    if (!userId) return;
+    if (!localStorage.getItem('accessToken')) return;
     setLoading(true);
 
     try {
@@ -18,7 +18,7 @@ export const useTransactions = (userId) => {
       const data = Array.isArray(response) ? response : (response.data || response.items || response.transactions || []);
       
       const valid = (data ?? []).filter(
-        (t) => Math.abs(Number(t.amount || 0)) > 0 || Math.abs(Number(t.cashback_amount || 0)) > 0
+        (t) => Math.abs(Number(t.amount || t.totalAmount || 0)) > 0 || Math.abs(Number(t.cashback_amount || t.cashbackAmount || 0)) > 0
       );
       
       if (append) {
@@ -48,11 +48,9 @@ export const useTransactions = (userId) => {
   };
 
   useEffect(() => {
-    if (userId) {
-      setPage(1);
-      fetchTransactions(1, false);
-    }
-  }, [userId]);
+    setPage(1);
+    fetchTransactions(1, false);
+  }, []);
 
   // Yangi tranzaksiya qo'shish (Redeem API)
   const addTransaction = async (qrPayload) => {

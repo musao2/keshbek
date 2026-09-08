@@ -38,37 +38,37 @@ const formatDate = (iso) => {
 
 const HistoryPage = () => {
   const { user, profile } = useAuth();
-  const { transactions, loading, hasMore, loadMore } = useTransactions(user?.id);
+  const { transactions, loading, hasMore, loadMore } = useTransactions();
   const { station }                = useStationSettings();
-  const { summary }               = useSummary(user?.id);
+  const { summary }               = useSummary();
   const [activeTab, setActiveTab] = useState('ALL'); // 'ALL' | 'KIRIM' | 'CHIQIM'
 
   // Faqat haqiqiy pul tushgan yoki yechilgan tranzaksiyalar (0 so'mlik oddiy xabarlar o'tmaydi)
   const validTransactions = transactions.filter(
-    (t) => Math.abs(Number(t.amount || 0)) > 0 || Math.abs(Number(t.cashback_amount || 0)) > 0
+    (t) => Math.abs(Number(t.amount ?? t.totalAmount ?? 0)) > 0 || Math.abs(Number(t.cashback_amount ?? t.cashbackAmount ?? 0)) > 0
   );
 
   // Kirim va Chiqim amallarini ajratish
   const kirimTransactions = validTransactions.filter(
-    (t) => Number(t.cashback_amount) > 0 || (t.type || '').toLowerCase() === 'cashback' || (t.type || '').toUpperCase() === 'EARN'
+    (t) => Number(t.cashback_amount ?? t.cashbackAmount) > 0 || (t.type || '').toLowerCase() === 'cashback' || (t.type || '').toUpperCase() === 'EARN'
   );
   
   const chiqimTransactions = validTransactions.filter(
-    (t) => Number(t.cashback_amount) < 0 || (t.type || '').toLowerCase() === 'withdraw' || (t.type || '').toUpperCase() === 'WITHDRAW'
+    (t) => Number(t.cashback_amount ?? t.cashbackAmount) < 0 || (t.type || '').toLowerCase() === 'withdraw' || (t.type || '').toUpperCase() === 'WITHDRAW'
   );
 
   // Summary API dan aniqlangan qiymatlar (fallback: tranzaksiyalardan hisoblash)
-  const localKirim  = kirimTransactions.reduce((s, t)  => s + Number(t.cashback_amount || 0), 0);
-  const localChiqim = chiqimTransactions.reduce((s, t) => s + Math.abs(Number(t.cashback_amount || 0)), 0);
+  const localKirim  = kirimTransactions.reduce((s, t)  => s + Number(t.cashback_amount ?? t.cashbackAmount ?? 0), 0);
+  const localChiqim = chiqimTransactions.reduce((s, t) => s + Math.abs(Number(t.cashback_amount ?? t.cashbackAmount ?? 0)), 0);
 
-  const displayBalance       = summary?.balance         ?? profile?.cashback_balance ?? Math.max(0, localKirim - localChiqim);
+  const displayBalance       = summary?.balance         ?? profile?.cashbackBalance ?? profile?.cashback_balance ?? Math.max(0, localKirim - localChiqim);
   const displayTotalEarned   = summary?.totalEarned     ?? localKirim;
   const displayTotalSpent    = summary?.totalSpent      ?? localChiqim;
   const displayTotalPurchase = summary?.totalPurchase   ?? 0;
 
   // Saralanayotgan ro'yxat
   const filteredList = validTransactions.filter((t) => {
-    const isChiqim = Number(t.cashback_amount) < 0 || (t.type || '').toLowerCase() === 'withdraw' || (t.type || '').toUpperCase() === 'WITHDRAW';
+    const isChiqim = Number(t.cashback_amount ?? t.cashbackAmount) < 0 || (t.type || '').toLowerCase() === 'withdraw' || (t.type || '').toUpperCase() === 'WITHDRAW';
     if (activeTab === 'KIRIM') return !isChiqim;
     if (activeTab === 'CHIQIM') return isChiqim;
     return true;
@@ -209,11 +209,11 @@ const HistoryPage = () => {
         <div className="flex flex-col gap-2.5 px-4 pb-6">
           {filteredList.map((item, index) => {
             const isChiqim =
-              Number(item.cashback_amount) < 0 ||
+              Number(item.cashback_amount ?? item.cashbackAmount) < 0 ||
               (item.type || '').toLowerCase() === 'withdraw' ||
               (item.type || '').toUpperCase() === 'WITHDRAW';
 
-            const cashbackVal = Math.abs(Number(item.cashback_amount || 0));
+            const cashbackVal = Math.abs(Number(item.cashback_amount ?? item.cashbackAmount ?? 0));
 
             return (
               <div
@@ -250,7 +250,7 @@ const HistoryPage = () => {
 
                     <div className="flex items-center gap-2 mt-1">
                       <p className="text-gray-400 text-xs font-medium">
-                        {formatDate(item.created_at)}
+                        {formatDate(item.created_at || item.createdAt)}
                       </p>
                       {item.fuel_type && (
                         <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-medium flex items-center gap-1">

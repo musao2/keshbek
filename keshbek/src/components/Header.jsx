@@ -9,13 +9,13 @@ import NotificationModal from './NotificationModal';
 const Header = () => {
   const { user, profile } = useAuth();
   const { unreadCount } = useNotifications();
-  const { summary } = useSummary(user?.id);
+  const { summary } = useSummary();
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // summary API dan olingan balans — fallback sifatida profile.cashback_balance
+  // summary API dan olingan balans — fallback sifatida profile.cashbackBalance
   const rawBalance = summary?.balance ?? (
-    profile?.cashback_balance != null
-      ? Number(profile.cashback_balance)
+    (profile?.cashbackBalance ?? profile?.cashback_balance) != null
+      ? Number(profile.cashbackBalance ?? profile.cashback_balance)
       : null
   );
 

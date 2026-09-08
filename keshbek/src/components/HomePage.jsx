@@ -24,14 +24,14 @@ const formatDate = (iso) => {
 
 const HomePage = () => {
   const { user, profile, refreshProfile } = useAuth();
-  const { transactions, addTransaction } = useTransactions(user?.id);
+  const { transactions, addTransaction } = useTransactions();
   const { station } = useStationSettings();
-  const { summary, refetch: refetchSummary } = useSummary(user?.id);
+  const { summary, error: summaryError, refetch: refetchSummary } = useSummary();
   const [showScanner, setShowScanner] = useState(false);
   const [scanMsg, setScanMsg] = useState('');
 
   // Summary dan olingan yoki profile fallback
-  const displayBalance       = summary?.balance         ?? profile?.cashback_balance ?? 0;
+  const displayBalance       = summary?.balance         ?? profile?.cashbackBalance ?? profile?.cashback_balance ?? 0;
   const displayCashbackPct   = summary?.cashbackPercent ?? station.cashback_percent  ?? 0;
   const displayTotalEarned   = summary?.totalEarned     ?? 0;
   const displayTotalSpent    = summary?.totalSpent      ?? 0;
@@ -39,8 +39,10 @@ const HomePage = () => {
 
   // Faqat haqiqiy pul tushgan yoki yechilgan tranzaksiyalar (0 so'mlik oddiy xabarlar o'tmaydi)
   const validTransactions = transactions.filter(
-    (t) => Math.abs(Number(t.amount || 0)) > 0 || Math.abs(Number(t.cashback_amount || 0)) > 0
+    (t) => Math.abs(Number(t.amount ?? t.totalAmount ?? 0)) > 0 || Math.abs(Number(t.cashback_amount ?? t.cashbackAmount ?? 0)) > 0
   );
+
+
 
   const recentTx = validTransactions.slice(0, 3);
 
@@ -89,6 +91,12 @@ const HomePage = () => {
           <div className={`mb-4 px-4 py-3 rounded-xl text-[14px] font-semibold text-center ${scanMsg.startsWith('✅') ? 'bg-[#e8f5e9] text-[#0f7b4c]' : 'bg-red-50 text-red-500'
             }`}>
             {scanMsg}
+          </div>
+        )}
+
+        {summaryError && (
+          <div className="mb-4 px-4 py-3 rounded-xl text-[14px] font-semibold text-center bg-red-50 text-red-500">
+            Keshbek xatoligi: {summaryError}
           </div>
         )}
 
@@ -198,12 +206,12 @@ const HomePage = () => {
                   </div>
                   <div>
                     <p className="font-bold text-[14px] text-[#1a1a1a]">{item.station_name || station.name}</p>
-                    <p className="text-gray-400 text-[12px]">{formatDate(item.created_at)}</p>
+                    <p className="text-gray-400 text-[12px]">{formatDate(item.created_at || item.createdAt)}</p>
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="font-bold text-[14px] text-[#1a1a1a]">- {formatSum(item.amount)}</p>
-                  <p className="text-[#0f7b4c] text-[13px] font-semibold">+ {formatSum(item.cashback_amount)}</p>
+                  <p className="font-bold text-[14px] text-[#1a1a1a]">- {formatSum(item.amount ?? item.totalAmount)}</p>
+                  <p className="text-[#0f7b4c] text-[13px] font-semibold">+ {formatSum(item.cashback_amount ?? item.cashbackAmount)}</p>
                 </div>
               </div>
             ))}

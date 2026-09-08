@@ -30,9 +30,9 @@ const formatSum = (n) => Number(n || 0).toLocaleString('uz-UZ') + " so'm";
 
 const ProfilePage = () => {
   const { profile, signOut, user, updateProfileName } = useAuth();
-  const { transactions } = useTransactions(user?.id);
+  const { transactions } = useTransactions();
   const { station } = useStationSettings();
-  const { summary } = useSummary(user?.id);
+  const { summary } = useSummary();
   const [copied, setCopied] = useState(false);
 
   // Karta raqami: summary → profile ikki joydan olinadi
@@ -113,11 +113,11 @@ const ProfilePage = () => {
   const now = new Date();
   const thisMonthCashback = transactions
     .filter(t => {
-      const d = new Date(t.created_at);
+      const d = new Date(t.created_at || t.createdAt);
       return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
     })
-    .filter(t => Number(t.cashback_amount) > 0 || (t.type || '').toLowerCase() === 'cashback' || (t.type || '').toUpperCase() === 'EARN')
-    .reduce((s, t) => s + Number(t.cashback_amount || 0), 0);
+    .filter(t => Number(t.cashback_amount ?? t.cashbackAmount) > 0 || (t.type || '').toLowerCase() === 'cashback' || (t.type || '').toUpperCase() === 'EARN')
+    .reduce((s, t) => s + Number(t.cashback_amount ?? t.cashbackAmount ?? 0), 0);
 
   const copyCard = () => {
     if (!rawCardNumber) return;
@@ -178,8 +178,8 @@ const ProfilePage = () => {
   };
 
   const totalEarnedCashback = transactions
-    .filter(t => Number(t.cashback_amount) > 0 || (t.type || '').toLowerCase() === 'cashback' || (t.type || '').toUpperCase() === 'EARN')
-    .reduce((s, t) => s + Number(t.cashback_amount || 0), 0);
+    .filter(t => Number(t.cashback_amount ?? t.cashbackAmount) > 0 || (t.type || '').toLowerCase() === 'cashback' || (t.type || '').toUpperCase() === 'EARN')
+    .reduce((s, t) => s + Number(t.cashback_amount ?? t.cashbackAmount ?? 0), 0);
 
   // Daraja ma'lumoti va ikonkasini olish
   const getLevelInfo = () => {
@@ -403,7 +403,7 @@ const ProfilePage = () => {
           </button>
 
           {/* Yordam */}
-          <div className="w-full flex items-center gap-3 px-4 py-4 text-left active:bg-gray-50">
+          <a href="https://t.me/musa_programmer" target="_blank" rel="noopener noreferrer" className="w-full flex items-center gap-3 px-4 py-4 text-left active:bg-gray-50 cursor-pointer">
             <div className="w-9 h-9 bg-[#f0f7f4] rounded-xl flex items-center justify-center text-[#0f7b4c] border border-emerald-100">
               <HiQuestionMarkCircle size={20} />
             </div>
@@ -411,7 +411,7 @@ const ProfilePage = () => {
               <p className="font-bold text-[14px] text-[#1a1a1a]">Yordam</p>
               <p className="text-gray-400 text-[12px]">Qo'llab-quvvatlash tizimi</p>
             </div>
-          </div>
+          </a>
 
         </div>
       </div>

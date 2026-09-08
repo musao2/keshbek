@@ -135,9 +135,10 @@ export const NotificationProvider = ({ children }) => {
     if (!user) return;
     const interval = setInterval(() => {
       fetchUnreadCount();
-    }, 60000);
+      fetchNotifications();
+    }, 180000); // 3 daqiqa
     return () => clearInterval(interval);
-  }, [user, fetchUnreadCount]);
+  }, [user, fetchUnreadCount, fetchNotifications]);
 
   return (
     <NotificationContext.Provider
