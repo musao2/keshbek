@@ -56,6 +56,7 @@ export const NotificationProvider = ({ children }) => {
   const [unreadCount, setUnreadCount]     = useState(0);
   const [loading, setLoading]             = useState(false);
   const [latestToast, setLatestToast]     = useState(null);
+  const [lastRefreshed, setLastRefreshed] = useState(null);
   const prevUnreadRef = useRef(0);
 
   const fetchUnreadCount = useCallback(async () => {
@@ -93,6 +94,7 @@ export const NotificationProvider = ({ children }) => {
       }
       prevUnreadRef.current = newUnread;
       setUnreadCount(newUnread);
+      setLastRefreshed(new Date());
     } catch (err) {
     } finally {
       setLoading(false);
@@ -133,10 +135,11 @@ export const NotificationProvider = ({ children }) => {
 
   useEffect(() => {
     if (!user) return;
+    // Har 2 daqiqada (120 000ms) avtomatik yangilanadi
     const interval = setInterval(() => {
       fetchUnreadCount();
       fetchNotifications();
-    }, 180000); // 3 daqiqa
+    }, 120000); // 2 daqiqa
     return () => clearInterval(interval);
   }, [user, fetchUnreadCount, fetchNotifications]);
 
@@ -152,6 +155,7 @@ export const NotificationProvider = ({ children }) => {
         markAllAsRead,
         latestToast,
         setLatestToast,
+        lastRefreshed,
       }}
     >
       {children}

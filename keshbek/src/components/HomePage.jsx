@@ -7,28 +7,18 @@ import { useStationSettings } from '../hooks/useStationSettings';
 import { useSummary } from '../hooks/useSummary';
 import QRScanner from './QRScanner';
 
-// So'm formatini chiroyli ko'rsatish
-const formatSum = (n) =>
-  Number(n || 0).toLocaleString('uz-UZ') + " so'm";
-
-const formatDate = (iso) => {
-  const d = new Date(iso);
-  const pad = (n) => String(n).padStart(2, '0');
-  const day = pad(d.getDate());
-  const month = pad(d.getMonth() + 1);
-  const year = d.getFullYear();
-  const hour = pad(d.getHours());
-  const minute = pad(d.getMinutes());
-  return `${day}.${month}.${year} ${hour}:${minute}`;
-};
+import { formatSum } from '../utils/formatters';
+import SkeletonTxCard from './common/SkeletonTxCard';
+import TransactionListItem from './common/TransactionListItem';
 
 const HomePage = () => {
   const { user, profile, refreshProfile } = useAuth();
-  const { transactions, addTransaction } = useTransactions();
+  const { transactions, addTransaction, loading: txLoading } = useTransactions();
   const { station } = useStationSettings();
   const { summary, error: summaryError, refetch: refetchSummary } = useSummary();
   const [showScanner, setShowScanner] = useState(false);
   const [scanMsg, setScanMsg] = useState('');
+  const [qrTapped, setQrTapped] = useState(false);
 
   // Summary dan olingan yoki profile fallback
   const displayBalance       = summary?.balance         ?? profile?.cashbackBalance ?? profile?.cashback_balance ?? 0;
@@ -37,35 +27,34 @@ const HomePage = () => {
   const displayTotalSpent    = summary?.totalSpent      ?? 0;
   const displayTotalPurchase = summary?.totalPurchase   ?? 0;
 
-  // Faqat haqiqiy pul tushgan yoki yechilgan tranzaksiyalar (0 so'mlik oddiy xabarlar o'tmaydi)
+  // Faqat haqiqiy pul tushgan yoki yechilgan tranzaksiyalar
   const validTransactions = transactions.filter(
     (t) => Math.abs(Number(t.amount ?? t.totalAmount ?? 0)) > 0 || Math.abs(Number(t.cashback_amount ?? t.cashbackAmount ?? 0)) > 0
   );
-
-
-
   const recentTx = validTransactions.slice(0, 3);
+
+  const handleQrClick = () => {
+    setQrTapped(true);
+    setTimeout(() => {
+      setQrTapped(false);
+      setShowScanner(true);
+    }, 200);
+  };
 
   const handleScan = async (qrData) => {
     setShowScanner(false);
-
     if (!qrData) {
       setScanMsg('❌ Yaroqsiz QR-kod!');
       setTimeout(() => setScanMsg(''), 3500);
       return;
     }
-
     setScanMsg('Yuklanmoqda...');
-
-    // Tranzaksiyani yuborish
     const { data, error } = await addTransaction(qrData);
-
     if (error) {
       setScanMsg('❌ Xatolik: ' + error);
     } else {
       const amountMsg = data?.cashbackAmount || data?.cashback_amount || data?.amount || data?.transaction?.cashback_amount || '';
       const type = data?.type || data?.transaction?.type || '';
-      
       if (type.toLowerCase() === 'withdraw') {
         setScanMsg(`✅ Keshbek yechib olindi! ${amountMsg ? formatSum(Math.abs(amountMsg)) : ''}`);
       } else {
@@ -74,9 +63,13 @@ const HomePage = () => {
       await refreshProfile();
       await refetchSummary();
     }
-
     setTimeout(() => setScanMsg(''), 3500);
   };
+
+  // Foydalanuvchi ismi
+  const userName = profile?.name ||
+    [profile?.firstName || profile?.first_name, profile?.lastName || profile?.last_name].filter(Boolean).join(' ') ||
+    'Foydalanuvchi';
 
   return (
     <>
@@ -84,136 +77,141 @@ const HomePage = () => {
         <QRScanner onClose={() => setShowScanner(false)} onScan={handleScan} />
       )}
 
-      <div className="flex-1 px-4 pt-6 bg-gray-50 pb-6 w-full font-sans">
+      <div className="flex-1 bg-[#F7F8FA] pb-8 w-full">
 
         {/* Scan xabari */}
         {scanMsg && (
-          <div className={`mb-4 px-4 py-3 rounded-xl text-[14px] font-semibold text-center ${scanMsg.startsWith('✅') ? 'bg-[#e8f5e9] text-[#0f7b4c]' : 'bg-red-50 text-red-500'
-            }`}>
+          <div className={`mx-4 mt-4 px-4 py-3 rounded-2xl text-[14px] font-semibold text-center animate-slide-down ${
+            scanMsg.startsWith('✅') ? 'bg-emerald-50 text-[#0f7b4c] border border-emerald-200' : 'bg-red-50 text-red-500 border border-red-200'
+          }`}>
             {scanMsg}
           </div>
         )}
 
         {summaryError && (
-          <div className="mb-4 px-4 py-3 rounded-xl text-[14px] font-semibold text-center bg-red-50 text-red-500">
-            Keshbek xatoligi: {summaryError}
+          <div className="mx-4 mt-4 px-4 py-3 rounded-2xl text-[14px] font-semibold text-center bg-red-50 text-red-500 border border-red-200">
+            ⚠️ Internet aloqasi yo'q yoki server javob bermayapti. Qayta urinib ko'ring.
           </div>
         )}
 
-        {/* Balans kartasi */}
-        <div className="bg-gradient-to-br from-[#0c613c] via-[#0f7b4c] to-[#14965d] rounded-3xl p-5 text-white mb-5 shadow-xl shadow-[#0f7b4c]/20 relative overflow-hidden border border-white/10">
-          {/* Decorative background glows */}
-          <div className="absolute -right-6 -bottom-6 w-32 h-32 bg-white/10 rounded-full blur-xl pointer-events-none" />
-          <div className="absolute -left-6 -top-6 w-24 h-24 bg-emerald-400/20 rounded-full blur-lg pointer-events-none" />
+        {/* Balans kartasi — Hero */}
+        <div className="mx-4 mt-5 bg-gradient-to-br from-[#0c613c] via-[#0f7b4c] to-[#14965d] rounded-[20px] p-5 text-white mb-4 shadow-lg shadow-[#0f7b4c]/25 relative overflow-hidden border border-white/10">
+          {/* Dekorativ elementlar */}
+          <div className="absolute -right-8 -bottom-8 w-36 h-36 bg-white/8 rounded-full blur-2xl pointer-events-none" />
+          <div className="absolute -left-8 -top-8 w-28 h-28 bg-emerald-400/15 rounded-full blur-xl pointer-events-none" />
 
-          {/* User greeting header inside card */}
-          <div className="pb-3 mb-3.5 border-b border-white/15 relative z-10">
-            <h2 className="text-[16px] text-white font-extrabold leading-tight flex items-center gap-1.5 flex-wrap">
-              <span className="text-emerald-200/90 font-medium">Xush kelibsiz,</span>
-              <span>
-                {profile?.name || 
-                 [profile?.firstName || profile?.first_name, profile?.lastName || profile?.last_name].filter(Boolean).join(' ') || 
-                 'Foydalanuvchi'}
-              </span>
-              <span>👋</span>
-            </h2>
+          {/* Salomlashuv — kichik va xira */}
+          <div className="relative z-10 mb-4">
+            <p className="text-emerald-200/75 text-[13px] font-medium flex items-center gap-1">
+              <HiSparkles size={13} className="text-amber-300" />
+              Xush kelibsiz, {userName} 👋
+            </p>
           </div>
 
-          {/* Balance info */}
+          {/* Balans — katta va aniq */}
           <div className="relative z-10">
-            <p className="text-emerald-100/75 text-[12px] font-medium mb-1">Keshbek balansi</p>
-            <h3 className="text-[34px] font-black leading-none mb-2 tracking-tight">
+            <p className="text-emerald-100/70 text-[11px] font-semibold uppercase tracking-wider mb-1.5">
+              Keshbek balansi
+            </p>
+            <h2 className="text-[36px] font-black leading-none mb-3 tracking-tight">
               {formatSum(displayBalance)}
-            </h3>
+            </h2>
 
             {/* Kirim / Chiqim mini statistika */}
-            {(displayTotalEarned > 0 || displayTotalSpent > 0 || displayTotalPurchase > 0) && (
+            {(displayTotalEarned > 0 || displayTotalSpent > 0) && (
               <div className="flex items-center gap-2 mb-3">
-                <div className="flex items-center gap-1 bg-white/10 backdrop-blur-md px-2.5 py-1 rounded-full text-[11px] font-semibold text-emerald-100 border border-white/10">
-                  <HiMiniArrowDownLeft size={13} className="text-emerald-300" />
+                <div className="flex items-center gap-1 bg-white/12 backdrop-blur-md px-2.5 py-1.5 rounded-full text-[11px] font-semibold text-emerald-100 border border-white/10">
+                  <HiMiniArrowDownLeft size={12} className="text-emerald-300" />
                   +{formatSum(displayTotalEarned)}
                 </div>
-                <div className="flex items-center gap-1 bg-white/10 backdrop-blur-md px-2.5 py-1 rounded-full text-[11px] font-semibold text-rose-100 border border-white/10">
-                  <HiMiniArrowUpRight size={13} className="text-rose-300" />
+                <div className="flex items-center gap-1 bg-white/12 backdrop-blur-md px-2.5 py-1.5 rounded-full text-[11px] font-semibold text-rose-100 border border-white/10">
+                  <HiMiniArrowUpRight size={12} className="text-rose-300" />
                   -{formatSum(displayTotalSpent)}
                 </div>
-                {displayTotalPurchase > 0 && (
-                  <div className="flex items-center gap-1 bg-white/10 backdrop-blur-md px-2.5 py-1 rounded-full text-[11px] font-semibold text-white/70 border border-white/10">
-                    🛒 {formatSum(displayTotalPurchase)}
-                  </div>
-                )}
               </div>
             )}
 
-            {/* Bottom badge and station */}
-            <div className="flex items-center justify-between pt-1">
+            {/* Pastki badge va shaxobcha */}
+            <div className="flex items-center justify-between pt-3 border-t border-white/15">
               <div className="flex items-center gap-1.5 bg-white/15 backdrop-blur-md px-3 py-1.5 rounded-full text-[12px] font-bold text-emerald-50 border border-white/15">
-                <HiSparkles size={14} className="text-amber-300" />
+                <HiSparkles size={13} className="text-amber-300" />
                 <span>{displayCashbackPct}% keshbek</span>
               </div>
-              <div className="flex items-center gap-1.5 text-[#e8f5e9] text-[12px] font-medium">
-                <RiGasStationFill size={15} />
+              <div className="flex items-center gap-1.5 text-emerald-100/80 text-[12px] font-medium">
+                <RiGasStationFill size={14} />
                 <span>{station.name}</span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* QR Skanerlash tugmasi */}
+        {/* QR Skanerlash tugmasi — animatsiya bilan */}
         <div
-          onClick={() => setShowScanner(true)}
-          className="bg-[#0bd39a] rounded-2xl h-[130px] flex flex-col items-center justify-center cursor-pointer mb-5 active:scale-95 transition-transform shadow-md shadow-[#0bd39a]/20"
+          onClick={handleQrClick}
+          className={`mx-4 bg-gradient-to-br from-[#0bd39a] to-[#09b382] rounded-[20px] h-[128px] flex flex-col items-center justify-center cursor-pointer mb-4 shadow-md shadow-[#0bd39a]/25 border border-[#09b382]/30 transition-all duration-200 select-none ${
+            qrTapped ? 'scale-[0.97]' : 'active:scale-[0.97] hover:shadow-lg hover:shadow-[#0bd39a]/30'
+          }`}
+          style={{ WebkitTapHighlightColor: 'transparent' }}
         >
-          <div className="bg-[#09b382] w-14 h-14 rounded-full flex items-center justify-center text-[#03543d] mb-2 shadow-inner">
+          <div className={`bg-white/25 w-14 h-14 rounded-full flex items-center justify-center text-[#03543d] mb-2 border border-white/30 transition-transform duration-200 ${qrTapped ? 'scale-110' : ''}`}>
             <HiQrCode size={30} />
           </div>
           <span className="text-[#03543d] font-bold text-[15px]">QR skanerlash</span>
-          <span className="text-[#03543d]/70 text-[12px] mt-0.5">To'lov uchun skanerlang</span>
+          <span className="text-[#03543d]/65 text-[12px] mt-0.5">To'lov uchun skanerlang</span>
         </div>
 
         {/* Aksiya banneri */}
-        <div className="bg-[#fee2cc] rounded-2xl p-4 mb-6 flex items-center gap-4 border border-[#fcd3b0]">
-          <div className="w-12 h-12 bg-[#f6d0b3] rounded-xl flex items-center justify-center text-[#965b20] shrink-0">
+        <div className="mx-4 bg-gradient-to-r from-[#fff4eb] to-[#fff8f2] rounded-[20px] p-4 mb-5 flex items-center gap-4 border border-[#fcd3b0]/60 shadow-sm">
+          <div className="w-12 h-12 bg-[#f6d0b3] rounded-2xl flex items-center justify-center text-[#965b20] shrink-0 border border-[#fcd3b0]">
             <RiGasStationFill size={22} />
           </div>
           <div>
-            <p className="text-[#965b20] font-bold text-[13px]">Keshbek {displayCashbackPct}%</p>
-            <p className="text-[#1a1a1a] font-bold text-[14px] leading-snug">
-              Har to'lovdan {displayCashbackPct}% keshbek yig'asiz
+            <p className="text-[#965b20] font-bold text-[12px] uppercase tracking-wide">Maxsus taklif</p>
+            <p className="text-[#1a1a1a] font-bold text-[14px] leading-snug mt-0.5">
+              Har to'lovdan <span className="text-[#0f7b4c]">{displayCashbackPct}% keshbek</span> yig'asiz
             </p>
           </div>
         </div>
 
-        {/* Oxirgi tranzaksiyalar (Faqat haqiqiy pul tushgan/yechilgan amallar) */}
-        <div className="flex justify-between items-center mb-3">
-          <h3 className="text-[15px] font-semibold text-[#1a1a1a]">Oxirgi to'lovlar</h3>
-          <span className="text-[13px] text-[#0f7b4c] font-medium">
+        {/* Oxirgi tranzaksiyalar */}
+        <div className="flex justify-between items-center mb-3 px-4">
+          <h3 className="text-[15px] font-bold text-[#1a1a1a]">Oxirgi to'lovlar</h3>
+          <span className="text-[13px] text-[#0f7b4c] font-semibold bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-100">
             {validTransactions.length} ta jami
           </span>
         </div>
 
-        {recentTx.length === 0 ? (
-          <div className="bg-white rounded-2xl p-6 text-center text-gray-400 text-[14px] border border-gray-100">
-            Hali to'lovlar yo'q. QR skanerlang!
+        {/* Skeleton loading */}
+        {txLoading && transactions.length === 0 && (
+          <div className="flex flex-col gap-3 px-4">
+            <SkeletonTxCard />
+            <SkeletonTxCard />
+            <SkeletonTxCard />
           </div>
-        ) : (
-          <div className="flex flex-col gap-3">
+        )}
+
+        {/* Bo'sh holat */}
+        {!txLoading && recentTx.length === 0 && (
+          <div className="mx-4 bg-white rounded-[20px] p-8 text-center border border-gray-100 shadow-sm">
+            <div className="w-16 h-16 bg-[#f0f7f4] rounded-3xl flex items-center justify-center mx-auto mb-4 border border-emerald-100">
+              <HiQrCode size={30} className="text-[#0f7b4c]" />
+            </div>
+            <h4 className="font-bold text-gray-800 text-[15px] mb-1.5">Hali to'lovlar yo'q</h4>
+            <p className="text-gray-400 text-[13px] leading-relaxed">
+              Zapravkada QR-kodni skanerlang va keshbeklaringizni yig'ing!
+            </p>
+          </div>
+        )}
+
+        {/* Tranzaksiya ro'yxati */}
+        {recentTx.length > 0 && (
+          <div className="flex flex-col gap-2.5 px-4">
             {recentTx.map((item) => (
-              <div key={item.id} className="bg-white rounded-2xl p-4 flex items-center justify-between shadow-sm border border-gray-100">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-[#f0f7f4] rounded-xl flex items-center justify-center text-[#0f7b4c]">
-                    <RiGasStationFill size={20} />
-                  </div>
-                  <div>
-                    <p className="font-bold text-[14px] text-[#1a1a1a]">{item.station_name || station.name}</p>
-                    <p className="text-gray-400 text-[12px]">{formatDate(item.created_at || item.createdAt)}</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="font-bold text-[14px] text-[#1a1a1a]">- {formatSum(item.amount ?? item.totalAmount)}</p>
-                  <p className="text-[#0f7b4c] text-[13px] font-semibold">+ {formatSum(item.cashback_amount ?? item.cashbackAmount)}</p>
-                </div>
-              </div>
+              <TransactionListItem 
+                key={item.id} 
+                item={item} 
+                defaultStationName={station.name} 
+              />
             ))}
           </div>
         )}
